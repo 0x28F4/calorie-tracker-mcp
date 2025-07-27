@@ -6,8 +6,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "dev": "nodemon --exec ts-node --esm src/index.ts",
-    "dev:http": "TRANSPORT=http nodemon --exec ts-node --esm src/index.ts",
+    "dev": "ts-node --esm src/index.ts",
+    "dev:http": "TRANSPORT=http ts-node --esm src/index.ts",
     "start": "node dist/index.js",
     "start:http": "TRANSPORT=http node dist/index.js",
     "clean": "rm -rf dist",
@@ -39,7 +39,6 @@
     "eslint": "^9.32.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.3",
-    "nodemon": "^3.1.10",
     "prettier": "^3.6.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3",
