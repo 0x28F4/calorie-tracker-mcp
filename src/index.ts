@@ -1,10 +1,17 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
+import express, { type Request, type Response } from 'express';
+import { randomUUID } from 'crypto';
 import { loadAppConfig, validateAppConfig } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { Database } from './db/index.js';
 import { startOfDay, endOfDay, format } from 'date-fns';
+
+// Transport configuration
+const TRANSPORT_TYPE = process.env.TRANSPORT || 'stdio';
+const HTTP_PORT = parseInt(process.env.PORT || '3000', 10);
 
 async function main(): Promise<void> {
   try {
@@ -322,14 +329,151 @@ async function main(): Promise<void> {
       },
     );
 
-    // Start the server with stdio transport
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-    logger.info('Calorie Tracker MCP Server started with stdio transport');
+    // Start server with selected transport
+    if (TRANSPORT_TYPE === 'http') {
+      await startHTTPServer(server);
+    } else {
+      // Default: Stdio Transport
+      const transport = new StdioServerTransport();
+      await server.connect(transport);
+      logger.info('Calorie Tracker MCP Server started with stdio transport');
+    }
   } catch (error) {
     logger.error('Failed to start server:', error);
     process.exit(1);
   }
+}
+
+async function startHTTPServer(server: McpServer): Promise<void> {
+  const app = express();
+  app.use(express.json());
+
+  // Store transports by session ID
+  const transports: Record<string, StreamableHTTPServerTransport> = {};
+
+  // Health endpoint
+  app.get('/health', (req: Request, res: Response) => {
+    res.json({
+      status: 'healthy',
+      protocol: 'MCP',
+      version: '2025-03-26',
+      transport: 'Streamable HTTP'
+    });
+  });
+
+  // GET endpoint for server-to-client notifications
+  app.get('/mcp', async (req: Request, res: Response) => {
+    const sessionId = req.headers['mcp-session-id'] as string;
+    const transport = sessionId ? transports[sessionId] : undefined;
+    
+    if (!transport) {
+      res.status(400).json({ error: 'Invalid session ID' });
+      return;
+    }
+
+    try {
+      await transport.handleRequest(req, res, null);
+    } catch (error) {
+      logger.error('Error handling GET request', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    }
+  });
+
+  // DELETE endpoint for session termination
+  app.delete('/mcp', async (req: Request, res: Response) => {
+    const sessionId = req.headers['mcp-session-id'] as string;
+    const transport = sessionId ? transports[sessionId] : undefined;
+    
+    if (!transport) {
+      res.status(400).json({ error: 'Invalid session ID' });
+      return;
+    }
+
+    try {
+      await transport.handleRequest(req, res, null);
+    } catch (error) {
+      logger.error('Error handling DELETE request', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    }
+  });
+
+  // POST endpoint for client-to-server messages
+  app.post('/mcp', async (req: Request, res: Response) => {
+    const sessionId = req.headers['mcp-session-id'] as string;
+    let transport = sessionId ? transports[sessionId] : undefined;
+
+    try {
+      // Create new transport for new sessions
+      if (!transport) {
+        transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (sid) => {
+            transports[sid] = transport!;
+            logger.info('Created new MCP session', { sessionId: sid });
+          }
+        });
+
+        // Set up close handler
+        transport.onclose = () => {
+          if (transport!.sessionId) {
+            delete transports[transport!.sessionId];
+            logger.info('MCP session closed', { sessionId: transport!.sessionId });
+          }
+        };
+
+        // Connect server to transport
+        await server.connect(transport);
+      }
+
+      // Handle the request
+      await transport.handleRequest(req, res, req.body);
+
+    } catch (error) {
+      logger.error('Error handling MCP request', error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32603,
+            message: 'Internal server error',
+          },
+          id: null,
+        });
+      }
+    }
+  });
+
+  // Start HTTP server
+  const httpServer = app.listen(HTTP_PORT, () => {
+    logger.info('Calorie Tracker MCP Server started with HTTP transport', {
+      port: HTTP_PORT,
+      protocol: 'Streamable HTTP (2025-03-26)',
+      endpoint: `http://localhost:${HTTP_PORT}/mcp`
+    });
+  });
+
+  // Graceful shutdown
+  process.on('SIGINT', () => {
+    logger.info('Received SIGINT, shutting down HTTP server gracefully...');
+    
+    httpServer.close(() => {
+      logger.info('HTTP server stopped');
+      process.exit(0);
+    });
+  });
+
+  process.on('SIGTERM', () => {
+    logger.info('Received SIGTERM, shutting down HTTP server gracefully...');
+    
+    httpServer.close(() => {
+      logger.info('HTTP server stopped');
+      process.exit(0);
+    });
+  });
 }
 
 main().catch((error) => {

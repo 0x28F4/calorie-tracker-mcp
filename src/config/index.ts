@@ -4,7 +4,7 @@ const defaultAppConfig: AppConfig = {
   databasePath: './data/calorie_tracker.db',
   logLevel: 'info',
   serverTransport: 'stdio',
-  serverPort: undefined, // Only used for SSE transport
+  serverPort: undefined, // Only used for HTTP transport
 };
 
 export function loadAppConfig(): AppConfig {
@@ -31,6 +31,6 @@ export function validateAppConfig(config: AppConfig): void {
   }
 
   if (config.serverTransport === 'sse' && !config.serverPort) {
-    throw new Error('Server port is required for SSE transport');
+    throw new Error('Server port is required for HTTP transport');
   }
 }

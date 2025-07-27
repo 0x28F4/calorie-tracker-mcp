@@ -7,7 +7,9 @@
   "scripts": {
     "build": "tsc",
     "dev": "nodemon --exec ts-node --esm src/index.ts",
+    "dev:http": "TRANSPORT=http nodemon --exec ts-node --esm src/index.ts",
     "start": "node dist/index.js",
+    "start:http": "TRANSPORT=http node dist/index.js",
     "clean": "rm -rf dist",
     "lint": "eslint 'src/**/*.{ts,tsx}' --fix",
     "lint:check": "eslint 'src/**/*.{ts,tsx}'",
@@ -17,6 +19,7 @@
     "check-all": "npm run type-check && npm run lint:check && npm run format:check",
     "fix-all": "npm run type-check && npm run lint && npm run format",
     "debug": "npm run build && npx @modelcontextprotocol/inspector node dist/index.js",
+    "debug:http": "npm run build && TRANSPORT=http node dist/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -29,6 +32,7 @@
   "devDependencies": {
     "@eslint/js": "^9.32.0",
     "@modelcontextprotocol/inspector": "^0.16.2",
+    "@types/express": "^5.0.3",
     "@types/node": "^24.1.0",
     "@typescript-eslint/eslint-plugin": "^8.38.0",
     "@typescript-eslint/parser": "^8.38.0",
@@ -45,6 +49,7 @@
     "@modelcontextprotocol/sdk": "^1.17.0",
     "@types/sqlite3": "^3.1.11",
     "date-fns": "^4.1.0",
+    "express": "^5.1.0",
     "sqlite3": "^5.1.7",
     "zod": "^3.25.76"
   }
