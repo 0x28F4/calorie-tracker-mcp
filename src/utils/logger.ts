@@ -47,5 +47,5 @@ class FileLogger implements Logger {
 }
 
 // Create logger with log file in data directory
-const logFile = join(process.cwd(), 'data', 'calorie-tracker.log');
+const logFile = join(process.cwd(), 'data', 'calorie_tracker.log');
 export const logger: Logger = new FileLogger(logFile);

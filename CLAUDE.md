@@ -109,3 +109,10 @@ src/
 ### Planned Dependencies
 - **zod** - Runtime type validation and schema definition
 - **date-fns** - Functional date utility library ✅ (Added for clean date formatting and manipulation)
+
+## Naming Conventions
+
+### File Naming
+- **Use underscores in file names** - prefer `calorie_tracker.db` over `calorie-tracker.db`
+- **Database files**: `calorie_tracker.db`, `calorie_tracker.log`
+- **Source files**: Follow existing patterns with camelCase for variables/functions

@@ -1,7 +1,7 @@
 import type { AppConfig } from '../types/config.js';
 
 const defaultAppConfig: AppConfig = {
-  databasePath: './data/calorie-tracker.db',
+  databasePath: './data/calorie_tracker.db',
   logLevel: 'info',
   serverTransport: 'stdio',
   serverPort: undefined, // Only used for SSE transport
