@@ -5,8 +5,8 @@ import prettier from 'eslint-plugin-prettier/recommended';
 
 export default tseslint.config(
   eslint.configs.recommended,
-  ...tseslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
+  ...tseslint.configs.stylisticTypeChecked,
   prettier,
   {
     languageOptions: {
@@ -18,11 +18,10 @@ export default tseslint.config(
   },
   {
     rules: {
-      '@typescript-eslint/explicit-function-return-type': 'warn',
+      // Error rules only - no warnings
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/no-explicit-any': 'error',
-      '@typescript-eslint/strict-boolean-expressions': 'warn',
-      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      'no-console': ['error', { allow: ['warn', 'error'] }],
     },
   },
   {
