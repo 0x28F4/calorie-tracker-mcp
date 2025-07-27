@@ -1,6 +1,4 @@
 import sqlite3 from 'sqlite3';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import { randomUUID } from 'crypto';
 import { format } from 'date-fns';
 import type { AppConfig } from '../types/config.js';
@@ -14,6 +12,45 @@ import type {
 } from '../types/database.js';
 import { logger } from '../utils/logger.js';
 
+const DATABASE_SCHEMA = `
+-- Calorie Tracker Database Schema
+
+-- User Settings Table
+CREATE TABLE IF NOT EXISTS user_settings (
+    user_id TEXT PRIMARY KEY,
+    timezone TEXT NOT NULL DEFAULT 'UTC',
+    metabolic_rate INTEGER NOT NULL DEFAULT 2000,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Meals Table
+CREATE TABLE IF NOT EXISTS meals (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    meal_name TEXT NOT NULL,
+    calories INTEGER NOT NULL,
+    protein_grams REAL,
+    carbs_grams REAL,
+    fat_grams REAL,
+    logged_at DATETIME NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES user_settings(user_id)
+);
+
+-- Weights Table
+CREATE TABLE IF NOT EXISTS weights (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    weight_kg REAL NOT NULL,
+    logged_at DATE NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES user_settings(user_id),
+    UNIQUE(user_id, logged_at)
+);
+`;
+
 export class Database {
   private db: sqlite3.Database;
 
@@ -24,12 +61,8 @@ export class Database {
 
   async initialize(): Promise<void> {
     return new Promise((resolve, reject) => {
-      // Read schema file
-      const schemaPath = join(process.cwd(), 'src', 'db', 'schema.sql');
-      const schema = readFileSync(schemaPath, 'utf-8');
-
-      // Execute schema
-      this.db.exec(schema, (error) => {
+      // Execute embedded schema
+      this.db.exec(DATABASE_SCHEMA, (error) => {
         if (error) {
           logger.error('Failed to initialize database schema', error);
           reject(error);
@@ -169,6 +202,10 @@ export class Database {
         },
       );
     });
+  }
+
+  getDb(): sqlite3.Database {
+    return this.db;
   }
 
   async close(): Promise<void> {

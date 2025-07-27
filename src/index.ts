@@ -4,6 +4,14 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { loadAppConfig, validateAppConfig } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { Database } from './db/index.js';
+import {
+  addMealTool,
+  handleAddMeal,
+  getTodaySummaryTool,
+  handleGetTodaySummary,
+  checkWeightTool,
+  handleCheckWeight,
+} from './tools/index.js';
 
 async function main(): Promise<void> {
   try {
@@ -36,37 +44,23 @@ async function main(): Promise<void> {
     // Set up tool handlers
     server.setRequestHandler(ListToolsRequestSchema, () => {
       return {
-        tools: [
-          {
-            name: 'hello',
-            description: 'A simple hello tool for testing',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                name: {
-                  type: 'string',
-                  description: 'Name to greet',
-                },
-              },
-            },
-          },
-        ],
+        tools: [addMealTool, getTodaySummaryTool, checkWeightTool],
       };
     });
 
-    server.setRequestHandler(CallToolRequestSchema, (request) => {
+    server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
 
-      if (name === 'hello') {
-        const nameArg = (args?.name as string) ?? 'World';
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Hello, ${nameArg}! This is the Calorie Tracker MCP Server.`,
-            },
-          ],
-        };
+      if (name === 'add_meal') {
+        return await handleAddMeal(args, database, userId);
+      }
+
+      if (name === 'get_today_summary') {
+        return await handleGetTodaySummary(args, database, userId);
+      }
+
+      if (name === 'check_weight') {
+        return await handleCheckWeight(args, database, userId);
       }
 
       throw new Error(`Unknown tool: ${name}`);
