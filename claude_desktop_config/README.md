@@ -21,7 +21,6 @@ This directory contains configuration files for testing the MCP server with Clau
 ## Configuration Options
 
 - **calorie-tracker**: Production build (requires `npm run build`)
-- **calorie-tracker-dev**: Development build (runs TypeScript directly)
 
 ## Testing
 
@@ -34,5 +33,5 @@ After setting up the configuration:
 
 For debugging and development, use the MCP Inspector instead:
 ```bash
-npm run debug:dev  # Interactive debugging interface
+npm run debug  # Interactive debugging interface
 ```
