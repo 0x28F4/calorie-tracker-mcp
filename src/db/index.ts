@@ -175,37 +175,181 @@ export class Database {
 
   async createWeight(userId: string, input: CreateWeightInput): Promise<Weight> {
     return new Promise((resolve, reject) => {
-      const id = randomUUID();
-      const now = new Date().toISOString();
       const loggedAtDate = format(input.loggedAt ?? new Date(), 'yyyy-MM-dd');
 
-      const weight: Weight = {
-        id,
-        userId,
-        weightKg: input.weightKg,
-        loggedAt: new Date(loggedAtDate),
-        createdAt: new Date(now),
-      };
-
-      this.db.run(
-        `INSERT INTO weights (id, user_id, weight_kg, logged_at, created_at)
-         VALUES (?, ?, ?, ?, ?)`,
-        [weight.id, weight.userId, weight.weightKg, loggedAtDate, now],
-        function (error) {
+      // Check if weight already exists for this user and date
+      this.db.get(
+        'SELECT id, weight_kg, logged_at, created_at FROM weights WHERE user_id = ? AND logged_at = ?',
+        [userId, loggedAtDate],
+        (error, existingRow: unknown) => {
           if (error) {
-            logger.error('Failed to create weight entry', error);
+            logger.error('Failed to check existing weight', error);
             reject(error);
+            return;
+          }
+
+          if (existingRow) {
+            // Update existing weight entry
+            const dbRow = existingRow as {
+              id: string;
+              weight_kg: number;
+              logged_at: string;
+              created_at: string;
+            };
+
+            this.db.run(
+              'UPDATE weights SET weight_kg = ? WHERE user_id = ? AND logged_at = ?',
+              [input.weightKg, userId, loggedAtDate],
+              function (updateError) {
+                if (updateError) {
+                  logger.error('Failed to update weight entry', updateError);
+                  reject(updateError);
+                } else {
+                  const weight: Weight = {
+                    id: dbRow.id,
+                    userId,
+                    weightKg: input.weightKg,
+                    loggedAt: new Date(dbRow.logged_at),
+                    createdAt: new Date(dbRow.created_at),
+                  };
+                  logger.info('Updated weight entry', {
+                    id: weight.id,
+                    weightKg: weight.weightKg,
+                    previousWeight: dbRow.weight_kg,
+                  });
+                  resolve(weight);
+                }
+              },
+            );
           } else {
-            logger.info('Created weight entry', { id: weight.id, weightKg: weight.weightKg });
-            resolve(weight);
+            // Create new weight entry
+            const id = randomUUID();
+            const now = new Date().toISOString();
+
+            const weight: Weight = {
+              id,
+              userId,
+              weightKg: input.weightKg,
+              loggedAt: new Date(loggedAtDate),
+              createdAt: new Date(now),
+            };
+
+            this.db.run(
+              `INSERT INTO weights (id, user_id, weight_kg, logged_at, created_at)
+               VALUES (?, ?, ?, ?, ?)`,
+              [weight.id, weight.userId, weight.weightKg, loggedAtDate, now],
+              function (insertError) {
+                if (insertError) {
+                  logger.error('Failed to create weight entry', insertError);
+                  reject(insertError);
+                } else {
+                  logger.info('Created weight entry', { id: weight.id, weightKg: weight.weightKg });
+                  resolve(weight);
+                }
+              },
+            );
           }
         },
       );
     });
   }
 
-  getDb(): sqlite3.Database {
-    return this.db;
+  async getMealsForDateRange(
+    userId: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<
+    {
+      id: string;
+      mealName: string;
+      calories: number;
+      proteinGrams: number | null;
+      carbsGrams: number | null;
+      fatGrams: number | null;
+      loggedAt: Date;
+    }[]
+  > {
+    return new Promise((resolve, reject) => {
+      const query = `
+        SELECT id, meal_name, calories, protein_grams, carbs_grams, fat_grams, logged_at
+        FROM meals 
+        WHERE user_id = ? AND logged_at BETWEEN ? AND ?
+        ORDER BY logged_at ASC
+      `;
+
+      this.db.all(query, [userId, startDate.toISOString(), endDate.toISOString()], (error, rows: unknown[]) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        const meals = rows.map((row) => {
+          const dbRow = row as {
+            id: string;
+            meal_name: string;
+            calories: number;
+            protein_grams: number | null;
+            carbs_grams: number | null;
+            fat_grams: number | null;
+            logged_at: string;
+          };
+          return {
+            id: dbRow.id,
+            mealName: dbRow.meal_name,
+            calories: dbRow.calories,
+            proteinGrams: dbRow.protein_grams,
+            carbsGrams: dbRow.carbs_grams,
+            fatGrams: dbRow.fat_grams,
+            loggedAt: new Date(dbRow.logged_at),
+          };
+        });
+
+        resolve(meals);
+      });
+    });
+  }
+
+  async getRecentWeights(
+    userId: string,
+    limit: number,
+  ): Promise<
+    {
+      id: string;
+      weightKg: number;
+      loggedAt: Date;
+    }[]
+  > {
+    return new Promise((resolve, reject) => {
+      const query = `
+        SELECT id, weight_kg, logged_at
+        FROM weights 
+        WHERE user_id = ?
+        ORDER BY logged_at DESC
+        LIMIT ?
+      `;
+
+      this.db.all(query, [userId, limit], (error, rows: unknown[]) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        const weights = rows.map((row) => {
+          const dbRow = row as {
+            id: string;
+            weight_kg: number;
+            logged_at: string;
+          };
+          return {
+            id: dbRow.id,
+            weightKg: dbRow.weight_kg,
+            loggedAt: new Date(dbRow.logged_at),
+          };
+        });
+
+        resolve(weights);
+      });
+    });
   }
 
   async close(): Promise<void> {

@@ -110,6 +110,28 @@ src/
 - **zod** - Runtime type validation and schema definition ✅ (Added for MCP tool argument validation)
 - **date-fns** - Functional date utility library ✅ (Added for clean date formatting and manipulation)
 
+## Database Guidelines
+
+### Database Query Encapsulation
+- **ALL database queries MUST be placed in the Database class** (`src/db/index.ts`)
+- **DO NOT scatter SQL queries throughout the codebase** (e.g., in `src/index.ts` or tool files)
+- **Use proper method names** that describe the operation: `createMeal()`, `getMealsForDateRange()`, `getRecentWeights()`
+- **Handle database errors within the Database class** and return meaningful error messages
+- **Use the embedded schema pattern** - define `DATABASE_SCHEMA` constant in TypeScript instead of external `.sql` files
+
+### Proper Database Architecture
+```typescript
+// ❌ Bad - queries scattered in index.ts
+server.registerTool('get_summary', {}, async (args) => {
+  const meals = await db.all('SELECT * FROM meals WHERE...');
+});
+
+// ✅ Good - queries encapsulated in Database class
+server.registerTool('get_summary', {}, async (args) => {
+  const meals = await database.getMealsForDateRange(userId, startDate, endDate);
+});
+```
+
 ## Naming Conventions
 
 ### File Naming
