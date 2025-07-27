@@ -34,11 +34,17 @@
 ### Phase 2: Enhanced Tracking & CRUD Operations 🚧 IN PROGRESS
 
 #### Remote Access Setup
-- [ ] Research and choose remote transport (SSE vs HTTP)
-- [ ] Implement chosen transport alongside stdio
-- [ ] Add authentication (API key) - requires research first!
+- [x] Research and choose remote transport (SSE vs HTTP) - **Streamable HTTP selected**
+- [ ] Implement Streamable HTTP transport (2025-03-26 protocol) alongside stdio
+- [ ] Add authentication (API key) 
 - [ ] Test remote access locally
 - [ ] Document remote setup process
+
+**Transport Decision**: Using **Streamable HTTP** (MCP protocol 2025-03-26) over legacy SSE transport because:
+- Latest MCP protocol standard
+- Single HTTP endpoint (simpler than SSE's dual endpoints)
+- Serverless platform compatibility (Fly.io, Railway, etc.)
+- Future-proof and actively maintained
 
 ### Phase 3: Analytics Foundation
 
@@ -123,10 +129,9 @@ A calorie tracking system designed as a first-class citizen for chat agents (lik
   - Excellent MCP SDK support
   - Strong ecosystem for web services
   
-- **Framework**: Express.js
-  - Minimal and flexible
-  - Direct control for MCP integration
-  - Simple WebSocket handling
+- **MCP Transport**: 
+  - **Local**: Stdio transport for Claude Desktop
+  - **Remote**: Streamable HTTP (MCP protocol 2025-03-26) via Express.js
   
 - **Database**: SQLite
   - Simple file-based database
@@ -136,8 +141,8 @@ A calorie tracking system designed as a first-class citizen for chat agents (lik
   
 - **MCP Integration**: @modelcontextprotocol/sdk
   - Official MCP SDK for TypeScript
-  - Stable, well-documented, and officially supported
-  - Better ecosystem maturity than Go alternatives
+  - Latest protocol support (2025-03-26)
+  - Dual transport capability (stdio + HTTP)
 
 ### Local Development
 - **Requirements**: Node.js, npm/yarn
