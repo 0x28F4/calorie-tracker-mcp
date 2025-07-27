@@ -58,6 +58,8 @@ A calorie tracking system designed as a first-class citizen for chat agents (lik
   
 - **MCP Integration**: @modelcontextprotocol/sdk
   - Official MCP SDK for TypeScript
+  - Stable, well-documented, and officially supported
+  - Better ecosystem maturity than Go alternatives
 
 ### Local Development
 - **Requirements**: Node.js, npm/yarn
@@ -124,8 +126,8 @@ All data will be scoped by user_id from day one, even though we'll start with a 
    - `add_meal`: Log food with calories
    - `check_weight`: Record weight
    - `get_today_summary`: View today's intake
-4. Set up PostgreSQL with basic schema
-5. Deploy to Railway/Render
+4. Set up SQLite with basic schema
+5. Test locally with Claude Desktop
 
 **Testing**: Use Claude Desktop to interact with MCP server
 
@@ -261,8 +263,12 @@ All data will be scoped by user_id from day one, even though we'll start with a 
 1. Set up development environment
 2. Create GitHub repository
 3. Initialize TypeScript project with MCP SDK
-4. Set up PostgreSQL database
+4. Set up SQLite database
 5. Begin Stage 1 implementation
+
+## 💡 Why TypeScript?
+
+We chose TypeScript over Go because the official MCP SDK is TypeScript-first, providing better stability, documentation, and long-term support for building MCP servers.
 
 ## ✅ Decisions
 
