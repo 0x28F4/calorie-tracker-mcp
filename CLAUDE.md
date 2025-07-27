@@ -108,4 +108,4 @@ src/
 
 ### Planned Dependencies
 - **zod** - Runtime type validation and schema definition
-- **date-fns** - Functional date utility library
+- **date-fns** - Functional date utility library ✅ (Added for clean date formatting and manipulation)

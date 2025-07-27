@@ -3,6 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { loadAppConfig, validateAppConfig } from './config/index.js';
 import { logger } from './utils/logger.js';
+import { Database } from './db/index.js';
 
 async function main(): Promise<void> {
   try {
@@ -10,6 +11,14 @@ async function main(): Promise<void> {
     const appConfig = loadAppConfig();
     validateAppConfig(appConfig);
     logger.info('App configuration loaded successfully');
+
+    // Initialize database
+    const database = new Database(appConfig);
+    await database.initialize();
+
+    // Hard-coded user ID for now (will be configurable later)
+    const userId = 'user-1';
+    await database.ensureUserExists(userId);
 
     // Create MCP server
     const server = new Server(
