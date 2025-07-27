@@ -38,6 +38,27 @@ npm run clean       # Remove dist/ directory
 npm run type-check  # TypeScript compilation without emit
 ```
 
+## Debugging with MCP Inspector
+
+Use the MCP Inspector to test and debug your MCP server:
+
+```bash
+npm run debug       # Debug compiled server (build + inspect)
+npm run debug:dev   # Debug TypeScript server directly
+```
+
+The MCP Inspector provides:
+- **Tools tab**: Test MCP tools interactively
+- **Resources tab**: View available resources
+- **Prompts tab**: Test prompt templates
+- **Connection monitoring**: See real-time MCP messages
+
+**Inspector workflow**:
+1. Start server with inspector: `npm run debug:dev`
+2. Test tools in the Tools tab
+3. Verify server responses
+4. Debug any issues with real-time message monitoring
+
 ## Code Style Guidelines
 
 ### Programming Paradigm
