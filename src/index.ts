@@ -1,9 +1,6 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { loadAppConfig, validateAppConfig } from './config/index.js';
 import { logger } from './utils/logger.js';
 
@@ -24,11 +21,11 @@ async function main(): Promise<void> {
         capabilities: {
           tools: {},
         },
-      }
+      },
     );
 
     // Set up tool handlers
-    server.setRequestHandler(ListToolsRequestSchema, async () => {
+    server.setRequestHandler(ListToolsRequestSchema, () => {
       return {
         tools: [
           {
@@ -48,11 +45,11 @@ async function main(): Promise<void> {
       };
     });
 
-    server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    server.setRequestHandler(CallToolRequestSchema, (request) => {
       const { name, arguments: args } = request.params;
 
       if (name === 'hello') {
-        const nameArg = args?.name || 'World';
+        const nameArg = (args?.name as string) ?? 'World';
         return {
           content: [
             {
@@ -70,7 +67,6 @@ async function main(): Promise<void> {
     const transport = new StdioServerTransport();
     await server.connect(transport);
     logger.info('Calorie Tracker MCP Server started with stdio transport');
-
   } catch (error) {
     logger.error('Failed to start server:', error);
     process.exit(1);
