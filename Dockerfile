@@ -1,4 +1,4 @@
-FROM node:alpine AS builder
+FROM node:24-alpine3.21 AS builder
 
 WORKDIR /app
 
@@ -10,7 +10,7 @@ COPY . .
 
 RUN npm run build
 
-FROM node:alpine
+FROM node:24-alpine3.21
 
 RUN addgroup -g 1001 -S appuser && \
     adduser -S appuser -u 1001
