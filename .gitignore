@@ -33,5 +33,4 @@ coverage/
 *.tmp
 
 # MCP configuration
-.mcp.json
 claude_desktop_config.json
