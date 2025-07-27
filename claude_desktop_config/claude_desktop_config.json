@@ -7,7 +7,7 @@
     },
     "calorie-tracker-dev": {
       "command": "npx",
-      "args": ["ts-node", "src/index.ts"],
+      "args": ["ts-node", "--esm", "src/index.ts"],
       "cwd": "/Users/hero/fun/calorie_tracker_mcp"
     }
   }

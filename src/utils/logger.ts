@@ -6,7 +6,8 @@ export interface Logger {
 
 class ConsoleLogger implements Logger {
   info(message: string, ...args: unknown[]): void {
-    console.log(`[INFO] ${message}`, ...args);
+    // Use stderr to avoid interfering with MCP stdio communication
+    console.error(`[INFO] ${message}`, ...args);
   }
 
   warn(message: string, ...args: unknown[]): void {
