@@ -1,0 +1,7 @@
+dist/
+node_modules/
+*.log
+package-lock.json
+coverage/
+.nyc_output/
+*.md
