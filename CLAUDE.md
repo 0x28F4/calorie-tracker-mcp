@@ -106,8 +106,8 @@ src/
 - **nodemon** - Development hot reload
 - **ts-node** - TypeScript execution for development
 
-### Planned Dependencies
-- **zod** - Runtime type validation and schema definition
+### Core Dependencies
+- **zod** - Runtime type validation and schema definition ✅ (Added for MCP tool argument validation)
 - **date-fns** - Functional date utility library ✅ (Added for clean date formatting and manipulation)
 
 ## Naming Conventions

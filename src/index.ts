@@ -4,14 +4,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { loadAppConfig, validateAppConfig } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { Database } from './db/index.js';
-import {
-  addMealTool,
-  handleAddMeal,
-  getTodaySummaryTool,
-  handleGetTodaySummary,
-  checkWeightTool,
-  handleCheckWeight,
-} from './tools/index.js';
+import { Tools } from './tools/tools.js';
 
 async function main(): Promise<void> {
   try {
@@ -24,9 +17,8 @@ async function main(): Promise<void> {
     const database = new Database(appConfig);
     await database.initialize();
 
-    // Hard-coded user ID for now (will be configurable later)
-    const userId = 'user-1';
-    await database.ensureUserExists(userId);
+    // Initialize tools with database
+    const tools = new Tools(database);
 
     // Create MCP server
     const server = new Server(
@@ -44,26 +36,13 @@ async function main(): Promise<void> {
     // Set up tool handlers
     server.setRequestHandler(ListToolsRequestSchema, () => {
       return {
-        tools: [addMealTool, getTodaySummaryTool, checkWeightTool],
+        tools: tools.getTools(),
       };
     });
 
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
-
-      if (name === 'add_meal') {
-        return await handleAddMeal(args, database, userId);
-      }
-
-      if (name === 'get_today_summary') {
-        return await handleGetTodaySummary(args, database, userId);
-      }
-
-      if (name === 'check_weight') {
-        return await handleCheckWeight(args, database, userId);
-      }
-
-      throw new Error(`Unknown tool: ${name}`);
+      return await tools.handleTool(name, args);
     });
 
     // Start the server with stdio transport
