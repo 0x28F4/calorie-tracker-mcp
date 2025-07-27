@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "calories-tracker": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "/Users/hero/fun/calorie_tracker_mcp/dist/index.js"
+      ],
+      "env": {}
+    }
+  }
+}
