@@ -4,15 +4,15 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { loadConfig, validateConfig } from './config/index.js';
+import { loadAppConfig, validateAppConfig } from './config/index.js';
 import { logger } from './utils/logger.js';
 
 async function main(): Promise<void> {
   try {
-    // Load and validate configuration
-    const config = loadConfig();
-    validateConfig(config);
-    logger.info('Configuration loaded successfully');
+    // Load and validate app configuration
+    const appConfig = loadAppConfig();
+    validateAppConfig(appConfig);
+    logger.info('App configuration loaded successfully');
 
     // Create MCP server
     const server = new Server(

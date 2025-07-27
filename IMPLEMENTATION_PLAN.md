@@ -40,11 +40,20 @@ This document provides a detailed implementation roadmap for the MCP calorie tra
 3. Add basic logging system
 4. Create configuration system:
    ```typescript
-   interface Config {
+   // App-level configuration (environment/deployment)
+   interface AppConfig {
+     databasePath: string;
+     serverPort?: number;
+     logLevel: string;
+   }
+   
+   // User-specific settings (stored in database)
+   interface UserSettings {
      userId: number;
      timezone: string;
-     defaultMetabolicRate: number;
-     databasePath: string;
+     metabolicRate: number;
+     createdAt: Date;
+     updatedAt: Date;
    }
    ```
 
