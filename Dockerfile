@@ -12,6 +12,8 @@ RUN npm run build
 
 FROM node:24-alpine3.21
 
+RUN apk add --no-cache sqlite
+
 RUN addgroup -g 1001 -S appuser && \
     adduser -S appuser -u 1001
 
