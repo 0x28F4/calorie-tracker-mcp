@@ -447,18 +447,29 @@ function startHTTPServer(database: Database): void {
     try {
       // Create new transport and server for new sessions
       if (!transport || !mcpServer) {
-        // Generate user ID if not provided
-        const effectiveUserId = (req.headers['x-user-id'] as string) ?? `user-${randomUUID()}`;
+        // Require X-User-ID header
+        const userId = req.headers['x-user-id'] as string;
+        if (!userId) {
+          res.status(400).json({
+            jsonrpc: '2.0',
+            error: {
+              code: -32602,
+              message: 'X-User-ID header is required for HTTP transport',
+            },
+            id: null,
+          });
+          return;
+        }
 
         // Create user-contextual MCP server
-        mcpServer = new McpServer(effectiveUserId, database);
+        mcpServer = new McpServer(userId, database);
 
         transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: (sid) => {
             transports[sid] = transport!;
             sessionServers[sid] = mcpServer!;
-            logger.info('Created new MCP session', { sessionId: sid, userId: effectiveUserId });
+            logger.info('Created new MCP session', { sessionId: sid, userId });
           },
         });
 
