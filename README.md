@@ -231,12 +231,20 @@ All data scoped by user_id for future multi-user support.
 - Unit tests for database operations
 - Integration tests for MCP protocol compliance
 
-## ✅ Completed Setup
+## 📚 Documentation
+
+- **[DEVELOPMENT.md](./DEVELOPMENT.md)** - Complete guide for running and debugging both transport modes
+- **[CLAUDE.md](./CLAUDE.md)** - Development guidelines and coding standards
+- **[Dockerfile](./Dockerfile)** - Container deployment configuration
+
+## ✅ Current Status
 
 - ✅ TypeScript project with MCP SDK
-- ✅ SQLite database with schema
+- ✅ SQLite database with schema  
 - ✅ Core MCP tools functional
-- ✅ Tested with Claude Desktop
+- ✅ Dual transport support (stdio + HTTP)
+- ✅ User-contextual architecture with session isolation
+- ✅ Tested with Claude Desktop and MCP Inspector
 
 ## 💡 Why TypeScript?
 
