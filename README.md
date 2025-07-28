@@ -43,58 +43,6 @@
 - [x] Add debug middleware for MCP Inspector HTTP testing
 - [x] Document comprehensive development and debugging guide
 
-**Transport Decision**: Using **Streamable HTTP** (MCP protocol 2025-03-26) over legacy SSE transport because:
-- Latest MCP protocol standard
-- Single HTTP endpoint (simpler than SSE's dual endpoints)
-- Serverless platform compatibility (Fly.io, Railway, etc.)
-- Future-proof and actively maintained
-
-**Authentication Decision**: Using **Required User ID Header** for self-hosted simplicity:
-- This is a personal, self-hosted project (internet access is far future)
-- **Required** `X-User-ID` header - no fallback user generation
-- Each HTTP session gets isolated McpServer instance bound to the user ID
-- Perfect user isolation - no data leakage between users possible
-- Stdio transport uses `USER_ID` environment variable (required)
-- HTTP transport: Optional `USER_ID` env var enables debug middleware for testing
-- Can upgrade to proper auth (OAuth/tokens) when internet-facing
-
-### Phase 3: Analytics Foundation 🚧 NEXT
-
-#### Basic Analytics
-- [ ] brain storm what tool call we need. how many tools are required actually?
-- [ ] Metabolic rate calculation from historical data
-- [ ] Implement enhanced `get_daily_summary` (any date)
-- [ ] Implement `get_weight_trend` with moving averages
-- [ ] Implement `get_date_range_stats` for custom periods
-- [ ] Weekly/monthly summary reports
-- [ ] Weight prediction models
-- [ ] Deficit accuracy tracking (what does this mean?)
-
-#### High-Level Goals
-
-#### Key Tools
-- [ ] Implement `calculate_metabolic_rate`
-- [ ] Implement `predict_weight_loss`
-- [ ] Implement `get_analytics_report`
-
-### Phase 5: Production Deployment
-
-#### Deployment Tasks
-- [ ] Choose hosting platform (see hosting options below)
-- [ ] Set up CI/CD pipeline
-- [ ] Implement backup strategy
-- [ ] Monitoring and alerting
-- [ ] Security hardening
-- [ ] Add proper authentication (OAuth 2.1 / API keys) when internet-facing
-
-### Phase 6: UI & Integrations
-
-#### Future Enhancements
-- [ ] Optional web dashboard
-- [ ] Google Sheets direct integration
-- [ ] Mobile app considerations
-- [ ] Third-party fitness app sync
-
 ---
 
 ## 🎯 Project Overview
@@ -456,13 +404,40 @@ Regardless of hosting choice:
 
 ---
 
-This plan addresses all requirements from the original prompt:
+## 📋 Remaining Todo Items
+
+### Core Features
+- [ ] Implement graceful shutdown with connection removals
+- [ ] Test concurrent access through two different clients
+- [ ] Implement CSV import functionality for historical data
+
+### Analytics & Reporting
+- [ ] Metabolic rate calculation from historical data
+- [ ] Enhanced daily summary tool (any date)
+- [ ] Weight trend analysis with moving averages
+- [ ] Date range statistics tool
+- [ ] Weekly/monthly summary reports
+- [ ] Weight prediction models
+
+### Production & Deployment
+- [ ] Choose hosting platform and deploy
+- [ ] Set up CI/CD pipeline
+- [ ] Implement backup strategy
+- [ ] Monitoring and alerting
+- [ ] Security hardening
+- [ ] Add proper authentication when internet-facing
+
+### Optional Enhancements
+- [ ] Web dashboard
+- [ ] Google Sheets direct integration
+- [ ] Mobile app considerations
+- [ ] Third-party fitness app sync
+
+---
+
+This project addresses all core requirements:
 - ✅ MCP integration for Claude interaction
 - ✅ Remote MCP server architecture
-- ✅ Meal and weight tracking
-- ✅ Persistent storage
-- ✅ Google Sheets export
-- ✅ Comprehensive analytics (deficit, moving averages, metabolic rate)
-- ✅ CSV import capabilities
-- ✅ Date range selections
-- ✅ Staged development approach
+- ✅ Meal and weight tracking with user isolation
+- ✅ Persistent SQLite storage
+- ✅ Comprehensive development tooling
