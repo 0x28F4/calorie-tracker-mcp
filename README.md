@@ -116,10 +116,6 @@ A calorie tracking system designed as a first-class citizen for chat agents (lik
   - Default metabolic rate
 - **Build**: `npm run build` compiles TypeScript to JavaScript
 
-### Hosting Environment
-- Multiple options to explore (see hosting options below)
-- Key requirement: WebSocket support for MCP protocol
-
 ### Analytics & Export
 - **CSV Export**: Primary export method
 - **Report Generation**: Text-based analytics reports
