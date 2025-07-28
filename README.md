@@ -31,14 +31,15 @@
 - [x] Test with MCP Inspector
 - [ ] Document setup process
 
-### Phase 2: Enhanced Tracking & CRUD Operations 🚧 IN PROGRESS
+### Phase 2: Enhanced Tracking & CRUD Operations ✅ COMPLETED
 
-#### Remote Access Setup
+#### Remote Access Setup ✅ COMPLETED
 - [x] Research and choose remote transport (SSE vs HTTP) - **Streamable HTTP selected**
 - [x] Implement Streamable HTTP transport (2025-03-26 protocol) alongside stdio
 - [x] Test remote access locally
-- [ ] Implement user identification via X-User-ID header
-- [ ] Auto-create users on first request with new ID
+- [x] Implement user identification via X-User-ID header (required, no fallback)
+- [x] Create user-contextual MCP servers with session isolation
+- [x] Test both HTTP and stdio transports successfully
 - [ ] Document remote setup process
 
 **Transport Decision**: Using **Streamable HTTP** (MCP protocol 2025-03-26) over legacy SSE transport because:
@@ -47,16 +48,15 @@
 - Serverless platform compatibility (Fly.io, Railway, etc.)
 - Future-proof and actively maintained
 
-**Authentication Decision**: Using **User ID Header** for self-hosted simplicity:
+**Authentication Decision**: Using **Required User ID Header** for self-hosted simplicity:
 - This is a personal, self-hosted project (internet access is far future)
-- Simple `X-User-ID` header with random user identifier
-- App auto-creates users on first request with new ID
-- Random IDs (like UUIDs) make it difficult to guess other users
-- Perfect for hobby/personal use while supporting multiple users
-- No authentication needed for stdio transport (local use only)
+- **Required** `X-User-ID` header - no fallback user generation
+- Each HTTP session gets isolated McpServer instance bound to the user ID
+- Perfect user isolation - no data leakage between users possible
+- Stdio transport uses `USER_ID` environment variable (local use only)
 - Can upgrade to proper auth (OAuth/tokens) when internet-facing
 
-### Phase 3: Analytics Foundation
+### Phase 3: Analytics Foundation 🚧 NEXT
 
 #### Basic Analytics
 - [ ] brain storm what tool call we need. how many tools are required actually?
