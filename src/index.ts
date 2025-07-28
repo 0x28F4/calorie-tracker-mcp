@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer as BaseMcpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
@@ -10,34 +10,40 @@ import { Database } from './db/index.js';
 import { startOfDay, endOfDay, format } from 'date-fns';
 
 // Transport configuration
-const TRANSPORT_TYPE = process.env.TRANSPORT || 'stdio';
-const HTTP_PORT = parseInt(process.env.PORT || '3000', 10);
+const TRANSPORT_TYPE = process.env.TRANSPORT ?? 'stdio';
+const HTTP_PORT = parseInt(process.env.PORT ?? '3000', 10);
+const STDIO_USER_ID = process.env.USER_ID ?? 'user-1';
 
-async function main(): Promise<void> {
-  try {
-    // Load and validate app configuration
-    const appConfig = loadAppConfig();
-    validateAppConfig(appConfig);
-    logger.info('App configuration loaded successfully');
+// User-contextual MCP Server that binds a user ID to all tools
+class McpServer {
+  private userId: string;
+  private server: BaseMcpServer;
+  private database: Database;
 
-    // Initialize database
-    const database = new Database(appConfig);
-    await database.initialize();
-
-    // Create MCP server
-    const server = new McpServer({
+  constructor(userId: string, database: Database) {
+    this.userId = userId;
+    this.database = database;
+    this.server = new BaseMcpServer({
       name: 'calorie-tracker-mcp',
       version: '1.0.0',
     });
 
+    this.registerTools();
+  }
+
+  // Expose the underlying server for transport connection
+  getServer(): BaseMcpServer {
+    return this.server;
+  }
+
+  private registerTools(): void {
     // Register add_meal tool
-    server.registerTool(
+    this.server.registerTool(
       'add_meal',
       {
         title: 'Add Meal',
         description: 'Add a meal entry to the calorie tracker',
         inputSchema: {
-          userId: z.string().optional().describe('User ID (optional, defaults to "user-1")'),
           mealName: z
             .string()
             .min(1, 'Meal name is required')
@@ -66,14 +72,14 @@ async function main(): Promise<void> {
         },
       },
       async (args) => {
-        const userId = args.userId ?? 'user-1';
+        const userId = this.userId; // Bound to this instance!
 
         try {
           // Ensure user exists
-          await database.ensureUserExists(userId);
+          await this.database.ensureUserExists(userId);
 
           // Create meal entry
-          const meal = await database.createMeal(userId, {
+          const meal = await this.database.createMeal(userId, {
             mealName: args.mealName,
             calories: args.calories,
             proteinGrams: args.proteinGrams,
@@ -95,8 +101,9 @@ async function main(): Promise<void> {
           if (meal.fatGrams !== null && meal.fatGrams !== undefined) {
             macros.push(`${meal.fatGrams}g fat`);
           }
-
           const macroText = macros.length > 0 ? ` (${macros.join(', ')})` : '';
+
+          // Format the logged date
           const loggedAtText = meal.loggedAt.toLocaleDateString();
 
           return {
@@ -122,13 +129,12 @@ async function main(): Promise<void> {
     );
 
     // Register get_today_summary tool
-    server.registerTool(
+    this.server.registerTool(
       'get_today_summary',
       {
         title: 'Get Today Summary',
         description: 'Get summary of calories and nutrition for today',
         inputSchema: {
-          userId: z.string().optional().describe('User ID (optional, defaults to "user-1")'),
           date: z
             .string()
             .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format')
@@ -137,7 +143,7 @@ async function main(): Promise<void> {
         },
       },
       async (args) => {
-        const userId = args.userId ?? 'user-1';
+        const userId = this.userId; // Bound to this instance!
 
         try {
           // Parse target date (default to today)
@@ -146,61 +152,70 @@ async function main(): Promise<void> {
           const endDate = endOfDay(targetDate);
 
           // Ensure user exists
-          await database.ensureUserExists(userId);
+          await this.database.ensureUserExists(userId);
 
-          // Get meals for the target date
-          const meals = await database.getMealsForDateRange(userId, startDate, endDate);
+          // Get meals for the day
+          const meals = await this.database.getMealsInDateRange(userId, startDate, endDate);
+
+          // Get weight for the date (try exact date first, then most recent)
+          let weight;
+          try {
+            weight = await this.database.getWeightForDate(userId, format(targetDate, 'yyyy-MM-dd'));
+          } catch {
+            // If no weight for exact date, get the most recent weight
+            const recentWeights = await this.database.getRecentWeights(userId, 1);
+            weight = recentWeights.length > 0 ? recentWeights[0] : null;
+          }
 
           // Calculate totals
-          const totals = {
-            calories: 0,
-            protein: 0,
-            carbs: 0,
-            fat: 0,
-            mealCount: meals.length,
-          };
+          const totalCalories = meals.reduce((total, meal) => total + meal.calories, 0);
+          const totalProtein = meals.reduce((total, meal) => total + (meal.proteinGrams ?? 0), 0);
+          const totalCarbs = meals.reduce((total, meal) => total + (meal.carbsGrams ?? 0), 0);
+          const totalFat = meals.reduce((total, meal) => total + (meal.fatGrams ?? 0), 0);
 
-          for (const meal of meals) {
-            totals.calories += meal.calories;
-            totals.protein += meal.proteinGrams ?? 0;
-            totals.carbs += meal.carbsGrams ?? 0;
-            totals.fat += meal.fatGrams ?? 0;
+          // Get user settings for metabolic rate
+          const userSettings = await this.database.getUserSettings(userId);
+          const metabolicRate = userSettings?.metabolicRate ?? 2000;
+          const deficit = metabolicRate - totalCalories;
+
+          // Format date for display
+          const dateDisplay = format(targetDate, 'MMMM do, yyyy');
+
+          // Build summary text
+          let summaryText = `📊 **Summary for ${dateDisplay}**\n\n`;
+          summaryText += `🔥 **Calories**: ${totalCalories} / ${metabolicRate} (${deficit > 0 ? 'deficit' : 'surplus'}: ${Math.abs(deficit)})\n`;
+
+          if (totalProtein > 0 || totalCarbs > 0 || totalFat > 0) {
+            summaryText += `📈 **Macros**: `;
+            const macros = [];
+            if (totalProtein > 0) macros.push(`${totalProtein.toFixed(1)}g protein`);
+            if (totalCarbs > 0) macros.push(`${totalCarbs.toFixed(1)}g carbs`);
+            if (totalFat > 0) macros.push(`${totalFat.toFixed(1)}g fat`);
+            summaryText += macros.join(', ') + '\n';
           }
 
-          const dateFormatted = format(targetDate, 'yyyy-MM-dd');
-          logger.info('Generated daily summary', { date: dateFormatted, totals, userId });
-
-          // Format output
-          let summary = `📊 **Daily Summary for ${dateFormatted}**\n\n`;
-          summary += `🍽️  **Meals logged:** ${totals.mealCount}\n`;
-          summary += `🔥 **Total calories:** ${totals.calories}\n`;
-
-          if (totals.protein > 0 || totals.carbs > 0 || totals.fat > 0) {
-            summary += `\n**Macronutrients:**\n`;
-            if (totals.protein > 0) summary += `• Protein: ${totals.protein.toFixed(1)}g\n`;
-            if (totals.carbs > 0) summary += `• Carbs: ${totals.carbs.toFixed(1)}g\n`;
-            if (totals.fat > 0) summary += `• Fat: ${totals.fat.toFixed(1)}g\n`;
+          if (weight) {
+            const weightDate = weight.loggedAt instanceof Date ? weight.loggedAt : new Date(weight.loggedAt);
+            const weightDateDisplay = format(weightDate, 'MMM do');
+            summaryText += `⚖️ **Weight**: ${weight.weightKg}kg (${weightDateDisplay})\n`;
           }
 
-          if (totals.mealCount > 0) {
-            summary += `\n**Meals:**\n`;
-            for (const meal of meals) {
-              const macros = [];
-              if (meal.proteinGrams) macros.push(`${meal.proteinGrams}g protein`);
-              if (meal.carbsGrams) macros.push(`${meal.carbsGrams}g carbs`);
-              if (meal.fatGrams) macros.push(`${meal.fatGrams}g fat`);
-              const macroText = macros.length > 0 ? ` (${macros.join(', ')})` : '';
-              summary += `• ${meal.mealName}: ${meal.calories} cal${macroText}\n`;
-            }
+          summaryText += `\n📋 **Meals** (${meals.length}):\n`;
+          if (meals.length === 0) {
+            summaryText += '• No meals logged';
           } else {
-            summary += `\nNo meals logged for this date.`;
+            meals.forEach((meal) => {
+              const mealTime = meal.loggedAt instanceof Date ? meal.loggedAt : new Date(meal.loggedAt);
+              const timeDisplay = format(mealTime, 'HH:mm');
+              summaryText += `• ${timeDisplay} - ${meal.mealName}: ${meal.calories} cal\n`;
+            });
           }
 
           return {
             content: [
               {
                 type: 'text',
-                text: summary,
+                text: summaryText,
               },
             ],
           };
@@ -210,7 +225,7 @@ async function main(): Promise<void> {
             content: [
               {
                 type: 'text',
-                text: `❌ Failed to get daily summary: ${String(error)}`,
+                text: `❌ Failed to get summary: ${String(error)}`,
               },
             ],
           };
@@ -219,14 +234,13 @@ async function main(): Promise<void> {
     );
 
     // Register check_weight tool
-    server.registerTool(
+    this.server.registerTool(
       'check_weight',
       {
         title: 'Check Weight',
         description:
           'Add/update a weight entry or check recent weight history. If a weight already exists for the date, it will be updated.',
         inputSchema: {
-          userId: z.string().optional().describe('User ID (optional, defaults to "user-1")'),
           weightKg: z
             .number()
             .min(0, 'Weight must be a positive number')
@@ -240,103 +254,124 @@ async function main(): Promise<void> {
         },
       },
       async (args) => {
-        const userId = args.userId ?? 'user-1';
+        const userId = this.userId; // Bound to this instance!
 
         try {
           // Ensure user exists
-          await database.ensureUserExists(userId);
+          await this.database.ensureUserExists(userId);
 
           if (args.weightKg !== undefined) {
             // Add or update weight entry
-            const weight = await database.createWeight(userId, {
+            const weight = await this.database.createWeight(userId, {
               weightKg: args.weightKg,
-              loggedAt: args.loggedAt ? new Date(args.loggedAt) : undefined,
+              loggedAt: args.loggedAt ? new Date(args.loggedAt) : new Date(),
             });
 
-            logger.info('Weight added/updated successfully via MCP tool', {
+            logger.info('Weight logged successfully via MCP tool', {
               weightId: weight.id,
               weightKg: weight.weightKg,
               userId,
             });
 
-            const loggedAtText = format(weight.loggedAt, 'yyyy-MM-dd');
+            const weightDate = weight.loggedAt instanceof Date ? weight.loggedAt : new Date(weight.loggedAt);
+            const dateDisplay = format(weightDate, 'MMMM do, yyyy');
 
             return {
               content: [
                 {
                   type: 'text',
-                  text: `✅ Weight logged: ${weight.weightKg} kg on ${loggedAtText}`,
+                  text: `✅ Weight logged: ${weight.weightKg}kg for ${dateDisplay}`,
                 },
               ],
             };
           } else {
             // Show recent weight history
-            const recentWeights = await database.getRecentWeights(userId, 7);
+            const recentWeights = await this.database.getRecentWeights(userId, 10);
 
             if (recentWeights.length === 0) {
               return {
                 content: [
                   {
                     type: 'text',
-                    text: '📊 No weight entries found. Use the weightKg parameter to log your weight.',
+                    text: '📊 No weight entries found. Add your first weight entry!',
                   },
                 ],
               };
             }
 
-            const latestWeight = recentWeights[0]!;
-            const previousWeight = recentWeights[1];
+            let historyText = `📊 **Recent Weight History** (${recentWeights.length} entries):\n\n`;
 
-            let summary = `📊 **Recent Weight History**\n\n`;
-            summary += `⚖️  **Current weight:** ${latestWeight.weightKg} kg (${format(latestWeight.loggedAt, 'yyyy-MM-dd')})\n`;
+            recentWeights.forEach((weight, index) => {
+              const weightDate = weight.loggedAt instanceof Date ? weight.loggedAt : new Date(weight.loggedAt);
+              const dateDisplay = format(weightDate, 'MMM do, yyyy');
+              const isToday = format(weightDate, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+              const todayMarker = isToday ? ' (today)' : '';
 
-            if (previousWeight) {
-              const change = latestWeight.weightKg - previousWeight.weightKg;
-              const changeText = change > 0 ? `+${change.toFixed(1)}` : change.toFixed(1);
-              const emoji = change > 0 ? '📈' : change < 0 ? '📉' : '➡️';
-              summary += `${emoji} **Change:** ${changeText} kg from ${format(previousWeight.loggedAt, 'yyyy-MM-dd')}\n`;
-            }
-
-            if (recentWeights.length > 1) {
-              summary += `\n**Last ${recentWeights.length} entries:**\n`;
-              for (const weight of recentWeights) {
-                summary += `• ${format(weight.loggedAt, 'yyyy-MM-dd')}: ${weight.weightKg} kg\n`;
+              if (index === 0) {
+                historyText += `• **${dateDisplay}${todayMarker}**: ${weight.weightKg}kg ← Latest\n`;
+              } else {
+                const prevWeight = recentWeights[index - 1]?.weightKg ?? 0;
+                const change = weight.weightKg - prevWeight;
+                const changeText = change !== 0 ? ` (${change > 0 ? '+' : ''}${change.toFixed(1)}kg)` : '';
+                historyText += `• ${dateDisplay}${todayMarker}: ${weight.weightKg}kg${changeText}\n`;
               }
-            }
+            });
 
-            logger.info('Generated weight history', { userId, entryCount: recentWeights.length });
+            // Add trend analysis if we have multiple entries
+            if (recentWeights.length >= 2) {
+              const latest = recentWeights[0]?.weightKg ?? 0;
+              const oldest = recentWeights[recentWeights.length - 1]?.weightKg ?? 0;
+              const totalChange = latest - oldest;
+              const trend = totalChange > 0 ? '📈 trending up' : totalChange < 0 ? '📉 trending down' : '➡️ stable';
+
+              historyText += `\n**Trend**: ${trend} (${totalChange > 0 ? '+' : ''}${totalChange.toFixed(1)}kg overall)`;
+            }
 
             return {
               content: [
                 {
                   type: 'text',
-                  text: summary,
+                  text: historyText,
                 },
               ],
             };
           }
         } catch (error) {
-          logger.error('Failed to handle weight via MCP tool', error);
+          logger.error('Failed to process weight check via MCP tool', error);
           return {
             content: [
               {
                 type: 'text',
-                text: `❌ Failed to handle weight: ${String(error)}`,
+                text: `❌ Failed to process weight check: ${String(error)}`,
               },
             ],
           };
         }
       },
     );
+  }
+}
+
+async function main(): Promise<void> {
+  try {
+    // Load and validate app configuration
+    const appConfig = loadAppConfig();
+    validateAppConfig(appConfig);
+    logger.info('App configuration loaded successfully');
+
+    // Initialize database
+    const database = new Database(appConfig);
+    await database.initialize();
 
     // Start server with selected transport
     if (TRANSPORT_TYPE === 'http') {
-      await startHTTPServer(server);
+      startHTTPServer(database);
     } else {
-      // Default: Stdio Transport
+      // Default: Stdio Transport with single user
+      const mcpServer = new McpServer(STDIO_USER_ID, database);
       const transport = new StdioServerTransport();
-      await server.connect(transport);
-      logger.info('Calorie Tracker MCP Server started with stdio transport');
+      await mcpServer.getServer().connect(transport);
+      logger.info('Calorie Tracker MCP Server started with stdio transport', { userId: STDIO_USER_ID });
     }
   } catch (error) {
     logger.error('Failed to start server:', error);
@@ -344,10 +379,12 @@ async function main(): Promise<void> {
   }
 }
 
-async function startHTTPServer(server: McpServer): Promise<void> {
+function startHTTPServer(database: Database): void {
   const app = express();
   app.use(express.json());
 
+  // Store user-contextual servers by session ID
+  const sessionServers: Record<string, McpServer> = {};
   // Store transports by session ID
   const transports: Record<string, StreamableHTTPServerTransport> = {};
 
@@ -357,7 +394,7 @@ async function startHTTPServer(server: McpServer): Promise<void> {
       status: 'healthy',
       protocol: 'MCP',
       version: '2025-03-26',
-      transport: 'Streamable HTTP'
+      transport: 'Streamable HTTP',
     });
   });
 
@@ -365,7 +402,7 @@ async function startHTTPServer(server: McpServer): Promise<void> {
   app.get('/mcp', async (req: Request, res: Response) => {
     const sessionId = req.headers['mcp-session-id'] as string;
     const transport = sessionId ? transports[sessionId] : undefined;
-    
+
     if (!transport) {
       res.status(400).json({ error: 'Invalid session ID' });
       return;
@@ -385,7 +422,7 @@ async function startHTTPServer(server: McpServer): Promise<void> {
   app.delete('/mcp', async (req: Request, res: Response) => {
     const sessionId = req.headers['mcp-session-id'] as string;
     const transport = sessionId ? transports[sessionId] : undefined;
-    
+
     if (!transport) {
       res.status(400).json({ error: 'Invalid session ID' });
       return;
@@ -405,33 +442,41 @@ async function startHTTPServer(server: McpServer): Promise<void> {
   app.post('/mcp', async (req: Request, res: Response) => {
     const sessionId = req.headers['mcp-session-id'] as string;
     let transport = sessionId ? transports[sessionId] : undefined;
+    let mcpServer = sessionId ? sessionServers[sessionId] : undefined;
 
     try {
-      // Create new transport for new sessions
-      if (!transport) {
+      // Create new transport and server for new sessions
+      if (!transport || !mcpServer) {
+        // Generate user ID if not provided
+        const effectiveUserId = (req.headers['x-user-id'] as string) ?? `user-${randomUUID()}`;
+
+        // Create user-contextual MCP server
+        mcpServer = new McpServer(effectiveUserId, database);
+
         transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: (sid) => {
             transports[sid] = transport!;
-            logger.info('Created new MCP session', { sessionId: sid });
-          }
+            sessionServers[sid] = mcpServer!;
+            logger.info('Created new MCP session', { sessionId: sid, userId: effectiveUserId });
+          },
         });
 
         // Set up close handler
         transport.onclose = () => {
           if (transport!.sessionId) {
             delete transports[transport!.sessionId];
+            delete sessionServers[transport!.sessionId];
             logger.info('MCP session closed', { sessionId: transport!.sessionId });
           }
         };
 
         // Connect server to transport
-        await server.connect(transport);
+        await mcpServer.getServer().connect(transport);
       }
 
       // Handle the request
       await transport.handleRequest(req, res, req.body);
-
     } catch (error) {
       logger.error('Error handling MCP request', error);
       if (!res.headersSent) {
@@ -452,14 +497,14 @@ async function startHTTPServer(server: McpServer): Promise<void> {
     logger.info('Calorie Tracker MCP Server started with HTTP transport', {
       port: HTTP_PORT,
       protocol: 'Streamable HTTP (2025-03-26)',
-      endpoint: `http://localhost:${HTTP_PORT}/mcp`
+      endpoint: `http://localhost:${HTTP_PORT}/mcp`,
     });
   });
 
   // Graceful shutdown
   process.on('SIGINT', () => {
     logger.info('Received SIGINT, shutting down HTTP server gracefully...');
-    
+
     httpServer.close(() => {
       logger.info('HTTP server stopped');
       process.exit(0);
@@ -468,7 +513,7 @@ async function startHTTPServer(server: McpServer): Promise<void> {
 
   process.on('SIGTERM', () => {
     logger.info('Received SIGTERM, shutting down HTTP server gracefully...');
-    
+
     httpServer.close(() => {
       logger.info('HTTP server stopped');
       process.exit(0);

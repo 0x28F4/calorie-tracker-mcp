@@ -309,6 +309,103 @@ export class Database {
     });
   }
 
+  async getMealsInDateRange(
+    userId: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<
+    {
+      id: string;
+      mealName: string;
+      calories: number;
+      proteinGrams: number | null;
+      carbsGrams: number | null;
+      fatGrams: number | null;
+      loggedAt: Date;
+    }[]
+  > {
+    return this.getMealsForDateRange(userId, startDate, endDate);
+  }
+
+  async getWeightForDate(
+    userId: string,
+    date: string,
+  ): Promise<{
+    id: string;
+    weightKg: number;
+    loggedAt: Date;
+  }> {
+    return new Promise((resolve, reject) => {
+      const query = `
+        SELECT id, weight_kg, logged_at
+        FROM weights 
+        WHERE user_id = ? AND logged_at = ?
+      `;
+
+      this.db.get(query, [userId, date], (error, row: unknown) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        if (!row) {
+          reject(new Error(`No weight found for date ${date}`));
+          return;
+        }
+
+        const dbRow = row as {
+          id: string;
+          weight_kg: number;
+          logged_at: string;
+        };
+
+        resolve({
+          id: dbRow.id,
+          weightKg: dbRow.weight_kg,
+          loggedAt: new Date(dbRow.logged_at),
+        });
+      });
+    });
+  }
+
+  async getUserSettings(userId: string): Promise<UserSettings | null> {
+    return new Promise((resolve, reject) => {
+      const query = `
+        SELECT user_id, timezone, metabolic_rate, created_at, updated_at
+        FROM user_settings 
+        WHERE user_id = ?
+      `;
+
+      this.db.get(query, [userId], (error, row: unknown) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        if (!row) {
+          resolve(null);
+          return;
+        }
+
+        const dbRow = row as {
+          user_id: string;
+          timezone: string;
+          metabolic_rate: number;
+          created_at: string;
+          updated_at: string;
+        };
+
+        resolve({
+          userId: dbRow.user_id,
+          timezone: dbRow.timezone,
+          metabolicRate: dbRow.metabolic_rate,
+          createdAt: new Date(dbRow.created_at),
+          updatedAt: new Date(dbRow.updated_at),
+        });
+      });
+    });
+  }
+
   async getRecentWeights(
     userId: string,
     limit: number,
