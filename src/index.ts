@@ -12,7 +12,7 @@ import { startOfDay, endOfDay, format } from 'date-fns';
 // Transport configuration
 const TRANSPORT_TYPE = process.env.TRANSPORT ?? 'stdio';
 const HTTP_PORT = parseInt(process.env.PORT ?? '3000', 10);
-const STDIO_USER_ID = process.env.USER_ID ?? 'user-1';
+const USER_ID = process.env.USER_ID;
 
 // User-contextual MCP Server that binds a user ID to all tools
 class McpServer {
@@ -368,10 +368,15 @@ async function main(): Promise<void> {
       startHTTPServer(database);
     } else {
       // Default: Stdio Transport with single user
-      const mcpServer = new McpServer(STDIO_USER_ID, database);
+      if (!USER_ID) {
+        logger.error('USER_ID environment variable is required for stdio transport');
+        throw new Error('USER_ID environment variable is required for stdio transport');
+      }
+
+      const mcpServer = new McpServer(USER_ID, database);
       const transport = new StdioServerTransport();
       await mcpServer.getServer().connect(transport);
-      logger.info('Calorie Tracker MCP Server started with stdio transport', { userId: STDIO_USER_ID });
+      logger.info('Calorie Tracker MCP Server started with stdio transport', { userId: USER_ID });
     }
   } catch (error) {
     logger.error('Failed to start server:', error);
@@ -382,6 +387,17 @@ async function main(): Promise<void> {
 function startHTTPServer(database: Database): void {
   const app = express();
   app.use(express.json());
+
+  // Debug middleware: inject X-User-ID header if USER_ID is set (optional for HTTP)
+  if (USER_ID) {
+    app.use((req, res, next) => {
+      if (!req.headers['x-user-id']) {
+        req.headers['x-user-id'] = USER_ID;
+        logger.info('Debug middleware: injected X-User-ID header', { userId: USER_ID });
+      }
+      next();
+    });
+  }
 
   // Store user-contextual servers by session ID
   const sessionServers: Record<string, McpServer> = {};
