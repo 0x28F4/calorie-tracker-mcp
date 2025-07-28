@@ -36,8 +36,9 @@
 #### Remote Access Setup
 - [x] Research and choose remote transport (SSE vs HTTP) - **Streamable HTTP selected**
 - [x] Implement Streamable HTTP transport (2025-03-26 protocol) alongside stdio
-- [ ] Add authentication (API key) 
 - [x] Test remote access locally
+- [ ] Implement user identification via X-User-ID header
+- [ ] Auto-create users on first request with new ID
 - [ ] Document remote setup process
 
 **Transport Decision**: Using **Streamable HTTP** (MCP protocol 2025-03-26) over legacy SSE transport because:
@@ -45,6 +46,15 @@
 - Single HTTP endpoint (simpler than SSE's dual endpoints)
 - Serverless platform compatibility (Fly.io, Railway, etc.)
 - Future-proof and actively maintained
+
+**Authentication Decision**: Using **User ID Header** for self-hosted simplicity:
+- This is a personal, self-hosted project (internet access is far future)
+- Simple `X-User-ID` header with random user identifier
+- App auto-creates users on first request with new ID
+- Random IDs (like UUIDs) make it difficult to guess other users
+- Perfect for hobby/personal use while supporting multiple users
+- No authentication needed for stdio transport (local use only)
+- Can upgrade to proper auth (OAuth/tokens) when internet-facing
 
 ### Phase 3: Analytics Foundation
 
@@ -73,6 +83,7 @@
 - [ ] Implement backup strategy
 - [ ] Monitoring and alerting
 - [ ] Security hardening
+- [ ] Add proper authentication (OAuth 2.1 / API keys) when internet-facing
 
 ### Phase 6: UI & Integrations
 
