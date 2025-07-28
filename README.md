@@ -40,7 +40,8 @@
 - [x] Implement user identification via X-User-ID header (required, no fallback)
 - [x] Create user-contextual MCP servers with session isolation
 - [x] Test both HTTP and stdio transports successfully
-- [ ] Document remote setup process
+- [x] Add debug middleware for MCP Inspector HTTP testing
+- [x] Document comprehensive development and debugging guide
 
 **Transport Decision**: Using **Streamable HTTP** (MCP protocol 2025-03-26) over legacy SSE transport because:
 - Latest MCP protocol standard
@@ -53,7 +54,8 @@
 - **Required** `X-User-ID` header - no fallback user generation
 - Each HTTP session gets isolated McpServer instance bound to the user ID
 - Perfect user isolation - no data leakage between users possible
-- Stdio transport uses `USER_ID` environment variable (local use only)
+- Stdio transport uses `USER_ID` environment variable (required)
+- HTTP transport: Optional `USER_ID` env var enables debug middleware for testing
 - Can upgrade to proper auth (OAuth/tokens) when internet-facing
 
 ### Phase 3: Analytics Foundation 🚧 NEXT
