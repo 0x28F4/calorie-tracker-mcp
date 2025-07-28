@@ -1,49 +1,4 @@
-# Calorie Tracker MCP - Complete Project Plan
-
-## 📋 Implementation Progress
-
-### Phase 1: Minimum Viable MCP Server ✅ COMPLETED
-
-#### Step 1: Project Setup & Basic MCP Server ✅
-- [x] Initialize TypeScript project
-- [x] Install MCP SDK and SQLite dependencies  
-- [x] Configure TypeScript with modern settings
-- [x] Set up ESLint and Prettier
-- [x] Create project directory structure
-- [x] Add development scripts and tooling
-- [x] Create configuration system (app vs user settings)
-- [x] Implement basic logging infrastructure
-- [x] Create MCP server with stdio transport
-- [x] Add hello tool for testing
-- [x] Set up MCP Inspector for debugging
-
-#### Step 2: Core Tools & Database ✅
-- [x] Design and implement SQLite database schema
-- [x] Create database initialization and migration system
-- [x] Implement `add_meal` MCP tool
-- [x] Implement `check_weight` MCP tool  
-- [x] Implement `get_today_summary` MCP tool
-- [x] Add input validation and error handling
-- [x] Create database wrapper with proper transactions
-
-#### Step 3: Testing & Local Deployment
-- [x] Test with Claude Desktop configuration
-- [x] Test with MCP Inspector
-- [ ] Document setup process
-
-### Phase 2: Enhanced Tracking & CRUD Operations ✅ COMPLETED
-
-#### Remote Access Setup ✅ COMPLETED
-- [x] Research and choose remote transport (SSE vs HTTP) - **Streamable HTTP selected**
-- [x] Implement Streamable HTTP transport (2025-03-26 protocol) alongside stdio
-- [x] Test remote access locally
-- [x] Implement user identification via X-User-ID header (required, no fallback)
-- [x] Create user-contextual MCP servers with session isolation
-- [x] Test both HTTP and stdio transports successfully
-- [x] Add debug middleware for MCP Inspector HTTP testing
-- [x] Document comprehensive development and debugging guide
-
----
+# Calorie Tracker MCP Server
 
 ## 🎯 Project Overview
 
@@ -97,7 +52,7 @@ A calorie tracking system designed as a first-class citizen for chat agents (lik
 - **Database**: SQLite
   - Simple file-based database
   - No separate database server needed
-  - Perfect for single-user application
+  - Supports multi-user with session isolation
   - Easy backup (just copy the file)
   
 - **MCP Integration**: @modelcontextprotocol/sdk
@@ -109,18 +64,17 @@ A calorie tracking system designed as a first-class citizen for chat agents (lik
 - **Requirements**: Node.js, npm/yarn
 - **Database**: SQLite file in project directory
 - **MCP Testing**: Claude Desktop app for local testing
-- **Hot Reload**: Nodemon for development
-- **Configuration**: Simple config file for:
-  - User ID (hard-coded initially)
-  - Timezone setting
-  - Default metabolic rate
+- **Configuration**: Environment-based configuration
+  - USER_ID for stdio transport (required)
+  - Optional debug middleware for HTTP testing
+  - Database path and server settings
 - **Build**: `npm run build` compiles TypeScript to JavaScript
 
 ### Analytics & Export
 - **CSV Export**: Primary export method
 - **Report Generation**: Text-based analytics reports
 - **Google Sheets**: Manual import via CSV (API integration later)
-- **Scheduled Tasks**: Node-cron for automation
+- **Future Automation**: Planned analytics scheduling
 
 ## 🏗 Architecture Design
 
@@ -153,7 +107,7 @@ graph TB
 - **Weights**: Daily weight entries with date constraints
 - **User Settings**: Metabolic rate, timezone preferences
 
-All data scoped by user_id for future multi-user support.
+All data scoped by user_id with full multi-user support and session isolation.
 
 ## 🔧 MCP Tools
 
@@ -194,31 +148,6 @@ All data scoped by user_id for future multi-user support.
 ## 💡 Why TypeScript?
 
 We chose TypeScript over Go because the official MCP SDK is TypeScript-first, providing better stability, documentation, and long-term support for building MCP servers.
-
-## ✅ Decisions
-
-1. **Multi-user support**: Yes, but simplified
-   - Hard-code user ID in MCP server config initially
-   - Data model supports user_id from the start
-   - No user management/auth system needed initially
-   
-2. **Food database**: Defer to later
-   - Could be implemented as another MCP tool later
-   - Focus on manual entry first
-   
-3. **Timezone handling**: Hard-code in config
-   - Set timezone in MCP server configuration
-   - Use for all date/time operations
-   - Can enhance later if needed
-   
-4. **Backup strategy**: Manual for now
-   - SQLite file can be copied manually
-   - Automated backups can come later
-   
-5. **Google Sheets integration**: Start simple
-   - Initial version: CSV export only
-   - Users can manually import to Sheets
-   - Direct Sheets API integration in later phase
 
 ---
 
