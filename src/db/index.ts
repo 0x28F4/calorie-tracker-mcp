@@ -1,3 +1,4 @@
+import { open, Database as SqliteDatabase } from 'sqlite';
 import sqlite3 from 'sqlite3';
 import { randomUUID } from 'crypto';
 import { format } from 'date-fns';
@@ -52,53 +53,30 @@ CREATE TABLE IF NOT EXISTS weights (
 `;
 
 export class Database {
-  private db: sqlite3.Database;
+  private _db: SqliteDatabase | null = null;
+  private config: AppConfig;
 
   constructor(config: AppConfig) {
-    this.db = new sqlite3.Database(config.databasePath);
-    this.db.run('PRAGMA foreign_keys = ON');
+    this.config = config;
   }
 
-  // Helper methods for promisifying sqlite3 operations
-  private async dbRun(query: string, params: unknown[] = []): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db.run(query, params, (error) => {
-        if (error) reject(error);
-        else resolve();
-      });
-    });
-  }
-
-  private async dbGet<T = unknown>(query: string, params: unknown[] = []): Promise<T | undefined> {
-    return new Promise((resolve, reject) => {
-      this.db.get(query, params, (error, row) => {
-        if (error) reject(error);
-        else resolve(row as T);
-      });
-    });
-  }
-
-  private async dbAll<T = unknown>(query: string, params: unknown[] = []): Promise<T[]> {
-    return new Promise((resolve, reject) => {
-      this.db.all(query, params, (error, rows) => {
-        if (error) reject(error);
-        else resolve(rows as T[]);
-      });
-    });
-  }
-
-  private async dbExec(query: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db.exec(query, (error) => {
-        if (error) reject(error);
-        else resolve();
-      });
-    });
+  private get db(): SqliteDatabase {
+    if (!this._db) {
+      throw new Error('Database not initialized. Call initialize() first.');
+    }
+    return this._db;
   }
 
   async initialize(): Promise<void> {
     try {
-      await this.dbExec(DATABASE_SCHEMA);
+      this._db = await open({
+        filename: this.config.databasePath,
+        driver: sqlite3.Database,
+      });
+
+      await this.db.exec('PRAGMA foreign_keys = ON');
+      await this.db.exec(DATABASE_SCHEMA);
+
       logger.info('Database schema initialized successfully');
     } catch (error) {
       logger.error('Failed to initialize database schema', error);
@@ -107,7 +85,7 @@ export class Database {
   }
 
   async ensureUserExists(userId: string): Promise<void> {
-    const existingUser = await this.dbGet<{ user_id: string }>('SELECT user_id FROM user_settings WHERE user_id = ?', [
+    const existingUser = await this.db.get<{ user_id: string }>('SELECT user_id FROM user_settings WHERE user_id = ?', [
       userId,
     ]);
 
@@ -131,7 +109,7 @@ export class Database {
     };
 
     try {
-      await this.dbRun(
+      await this.db.run(
         `INSERT INTO user_settings (user_id, timezone, metabolic_rate, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
         [settings.userId, settings.timezone, settings.metabolicRate, now, now],
       );
@@ -162,7 +140,7 @@ export class Database {
     };
 
     try {
-      await this.dbRun(
+      await this.db.run(
         `INSERT INTO meals (id, user_id, meal_name, calories, protein_grams, carbs_grams, fat_grams, logged_at, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -191,7 +169,7 @@ export class Database {
 
     try {
       // Check if weight already exists for this user and date
-      const existingRow = await this.dbGet<{
+      const existingRow = await this.db.get<{
         id: string;
         weight_kg: number;
         logged_at: string;
@@ -203,7 +181,7 @@ export class Database {
 
       if (existingRow) {
         // Update existing weight entry
-        await this.dbRun('UPDATE weights SET weight_kg = ? WHERE user_id = ? AND logged_at = ?', [
+        await this.db.run('UPDATE weights SET weight_kg = ? WHERE user_id = ? AND logged_at = ?', [
           input.weightKg,
           userId,
           loggedAtDate,
@@ -236,7 +214,7 @@ export class Database {
           createdAt: new Date(now),
         };
 
-        await this.dbRun(
+        await this.db.run(
           `INSERT INTO weights (id, user_id, weight_kg, logged_at, created_at)
            VALUES (?, ?, ?, ?, ?)`,
           [weight.id, weight.userId, weight.weightKg, loggedAtDate, now],
@@ -274,15 +252,17 @@ export class Database {
     `;
 
     try {
-      const rows = await this.dbAll<{
-        id: string;
-        meal_name: string;
-        calories: number;
-        protein_grams: number | null;
-        carbs_grams: number | null;
-        fat_grams: number | null;
-        logged_at: string;
-      }>(query, [userId, startDate.toISOString(), endDate.toISOString()]);
+      const rows = await this.db.all<
+        {
+          id: string;
+          meal_name: string;
+          calories: number;
+          protein_grams: number | null;
+          carbs_grams: number | null;
+          fat_grams: number | null;
+          logged_at: string;
+        }[]
+      >(query, [userId, startDate.toISOString(), endDate.toISOString()]);
 
       const meals = rows.map((row) => ({
         id: row.id,
@@ -334,7 +314,7 @@ export class Database {
     `;
 
     try {
-      const row = await this.dbGet<{
+      const row = await this.db.get<{
         id: string;
         weight_kg: number;
         logged_at: string;
@@ -363,7 +343,7 @@ export class Database {
     `;
 
     try {
-      const row = await this.dbGet<{
+      const row = await this.db.get<{
         user_id: string;
         timezone: string;
         metabolic_rate: number;
@@ -425,7 +405,7 @@ export class Database {
     `;
 
     try {
-      await this.dbRun(query, values);
+      await this.db.run(query, values);
       logger.info('Updated user settings', { userId, updates });
 
       // Return updated settings
@@ -455,11 +435,13 @@ export class Database {
     `;
 
     try {
-      const rows = await this.dbAll<{
-        id: string;
-        weight_kg: number;
-        logged_at: string;
-      }>(query, [userId, limit]);
+      const rows = await this.db.all<
+        {
+          id: string;
+          weight_kg: number;
+          logged_at: string;
+        }[]
+      >(query, [userId, limit]);
 
       const weights = rows.map((row) => ({
         id: row.id,
@@ -501,13 +483,15 @@ export class Database {
       ORDER BY DATE(m.logged_at) ASC
     `;
 
-    const rows = await this.dbAll<{
-      meal_date: string;
-      total_calories: number;
-      total_protein: number;
-      total_carbs: number;
-      total_fat: number;
-    }>(query, [userId, startDate.toISOString(), endDate.toISOString()]);
+    const rows = await this.db.all<
+      {
+        meal_date: string;
+        total_calories: number;
+        total_protein: number;
+        total_carbs: number;
+        total_fat: number;
+      }[]
+    >(query, [userId, startDate.toISOString(), endDate.toISOString()]);
 
     return rows.map((row) => ({
       date: row.meal_date,
@@ -538,10 +522,12 @@ export class Database {
       ORDER BY w.logged_at ASC
     `;
 
-    const rows = await this.dbAll<{
-      weight_date: string;
-      weight_kg: number;
-    }>(query, [userId, startDate.toISOString(), endDate.toISOString()]);
+    const rows = await this.db.all<
+      {
+        weight_date: string;
+        weight_kg: number;
+      }[]
+    >(query, [userId, startDate.toISOString(), endDate.toISOString()]);
 
     return rows.map((row) => ({
       date: row.weight_date,
@@ -549,22 +535,16 @@ export class Database {
     }));
   }
 
-  async close(): Promise<void> {
+  async closeDatabase(): Promise<void> {
     try {
-      await new Promise<void>((resolve, reject) => {
-        this.db.close((error) => {
-          if (error) {
-            logger.error('Error closing database', error);
-            reject(error);
-          } else {
-            logger.info('Database connection closed');
-            resolve();
-          }
-        });
-      });
+      if (this._db) {
+        await this._db.close();
+        this._db = null;
+        logger.info('Database connection closed');
+      }
     } catch (error) {
       // Log error but don't throw since we're closing anyway
-      logger.error('Error during database close', error);
+      logger.error('Error closing database', error);
     }
   }
 }
