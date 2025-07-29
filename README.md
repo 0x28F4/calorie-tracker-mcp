@@ -113,7 +113,8 @@ All data scoped by user_id with full multi-user support and session isolation.
 
 - [x] **add_meal**: Log meals with calories and optional macros
 - [x] **check_weight**: Record/update daily weight entries  
-- [x] **get_today_summary**: View daily calorie intake and totals
+- [x] **update_user_settings**: Update timezone and metabolic rate
+- [x] **get_summary**: Multi-day summary with daily stats and totals in JSON format
 - [ ] **list_recent_meals**: List recent meal entries
 - [ ] **update_meal**: Update existing meal entries
 - [ ] **delete_meal**: Delete meal entries

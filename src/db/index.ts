@@ -59,93 +59,110 @@ export class Database {
     this.db.run('PRAGMA foreign_keys = ON');
   }
 
-  async initialize(): Promise<void> {
+  // Helper methods for promisifying sqlite3 operations
+  private async dbRun(query: string, params: unknown[] = []): Promise<void> {
     return new Promise((resolve, reject) => {
-      // Execute embedded schema
-      this.db.exec(DATABASE_SCHEMA, (error) => {
-        if (error) {
-          logger.error('Failed to initialize database schema', error);
-          reject(error);
-        } else {
-          logger.info('Database schema initialized successfully');
-          resolve();
-        }
+      this.db.run(query, params, (error) => {
+        if (error) reject(error);
+        else resolve();
       });
     });
+  }
+
+  private async dbGet<T = unknown>(query: string, params: unknown[] = []): Promise<T | undefined> {
+    return new Promise((resolve, reject) => {
+      this.db.get(query, params, (error, row) => {
+        if (error) reject(error);
+        else resolve(row as T);
+      });
+    });
+  }
+
+  private async dbAll<T = unknown>(query: string, params: unknown[] = []): Promise<T[]> {
+    return new Promise((resolve, reject) => {
+      this.db.all(query, params, (error, rows) => {
+        if (error) reject(error);
+        else resolve(rows as T[]);
+      });
+    });
+  }
+
+  private async dbExec(query: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.db.exec(query, (error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+  }
+
+  async initialize(): Promise<void> {
+    try {
+      await this.dbExec(DATABASE_SCHEMA);
+      logger.info('Database schema initialized successfully');
+    } catch (error) {
+      logger.error('Failed to initialize database schema', error);
+      throw error;
+    }
   }
 
   async ensureUserExists(userId: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db.get('SELECT user_id FROM user_settings WHERE user_id = ?', [userId], (error, row) => {
-        if (error) {
-          reject(error);
-          return;
-        }
+    const existingUser = await this.dbGet<{ user_id: string }>('SELECT user_id FROM user_settings WHERE user_id = ?', [
+      userId,
+    ]);
 
-        if (!row) {
-          // Create default user settings
-          this.createUserSettings({
-            userId,
-            timezone: 'UTC',
-            metabolicRate: 2000,
-          })
-            .then(() => resolve())
-            .catch(reject);
-        } else {
-          resolve();
-        }
+    if (!existingUser) {
+      await this.createUserSettings({
+        userId,
+        timezone: 'UTC',
+        metabolicRate: 2000,
       });
-    });
+    }
   }
 
   async createUserSettings(input: CreateUserSettingsInput): Promise<UserSettings> {
-    return new Promise((resolve, reject) => {
-      const now = new Date().toISOString();
-      const settings: UserSettings = {
-        userId: input.userId,
-        timezone: input.timezone ?? 'UTC',
-        metabolicRate: input.metabolicRate ?? 2000,
-        createdAt: new Date(now),
-        updatedAt: new Date(now),
-      };
+    const now = new Date().toISOString();
+    const settings: UserSettings = {
+      userId: input.userId,
+      timezone: input.timezone ?? 'UTC',
+      metabolicRate: input.metabolicRate ?? 2000,
+      createdAt: new Date(now),
+      updatedAt: new Date(now),
+    };
 
-      this.db.run(
-        `INSERT INTO user_settings (user_id, timezone, metabolic_rate, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?)`,
+    try {
+      await this.dbRun(
+        `INSERT INTO user_settings (user_id, timezone, metabolic_rate, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
         [settings.userId, settings.timezone, settings.metabolicRate, now, now],
-        function (error) {
-          if (error) {
-            logger.error('Failed to create user settings', error);
-            reject(error);
-          } else {
-            logger.info('Created user settings', { userId: input.userId });
-            resolve(settings);
-          }
-        },
       );
-    });
+      logger.info('Created user settings', { userId: input.userId });
+      return settings;
+    } catch (error) {
+      logger.error('Failed to create user settings', error);
+      throw error;
+    }
   }
 
   async createMeal(userId: string, input: CreateMealInput): Promise<Meal> {
-    return new Promise((resolve, reject) => {
-      const id = randomUUID();
-      const now = new Date().toISOString();
-      const loggedAt = (input.loggedAt ?? new Date()).toISOString();
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    const loggedAt = (input.loggedAt ?? new Date()).toISOString();
 
-      const meal: Meal = {
-        id,
-        userId,
-        mealName: input.mealName,
-        calories: input.calories,
-        proteinGrams: input.proteinGrams,
-        carbsGrams: input.carbsGrams,
-        fatGrams: input.fatGrams,
-        loggedAt: new Date(loggedAt),
-        createdAt: new Date(now),
-        updatedAt: new Date(now),
-      };
+    const meal: Meal = {
+      id,
+      userId,
+      mealName: input.mealName,
+      calories: input.calories,
+      proteinGrams: input.proteinGrams,
+      carbsGrams: input.carbsGrams,
+      fatGrams: input.fatGrams,
+      loggedAt: new Date(loggedAt),
+      createdAt: new Date(now),
+      updatedAt: new Date(now),
+    };
 
-      this.db.run(
+    try {
+      await this.dbRun(
         `INSERT INTO meals (id, user_id, meal_name, calories, protein_grams, carbs_grams, fat_grams, logged_at, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -160,98 +177,78 @@ export class Database {
           now,
           now,
         ],
-        function (error) {
-          if (error) {
-            logger.error('Failed to create meal', error);
-            reject(error);
-          } else {
-            logger.info('Created meal', { id: meal.id, mealName: meal.mealName });
-            resolve(meal);
-          }
-        },
       );
-    });
+      logger.info('Created meal', { id: meal.id, mealName: meal.mealName });
+      return meal;
+    } catch (error) {
+      logger.error('Failed to create meal', error);
+      throw error;
+    }
   }
 
   async createWeight(userId: string, input: CreateWeightInput): Promise<Weight> {
-    return new Promise((resolve, reject) => {
-      const loggedAtDate = format(input.loggedAt ?? new Date(), 'yyyy-MM-dd');
+    const loggedAtDate = format(input.loggedAt ?? new Date(), 'yyyy-MM-dd');
 
+    try {
       // Check if weight already exists for this user and date
-      this.db.get(
-        'SELECT id, weight_kg, logged_at, created_at FROM weights WHERE user_id = ? AND logged_at = ?',
-        [userId, loggedAtDate],
-        (error, existingRow: unknown) => {
-          if (error) {
-            logger.error('Failed to check existing weight', error);
-            reject(error);
-            return;
-          }
+      const existingRow = await this.dbGet<{
+        id: string;
+        weight_kg: number;
+        logged_at: string;
+        created_at: string;
+      }>('SELECT id, weight_kg, logged_at, created_at FROM weights WHERE user_id = ? AND logged_at = ?', [
+        userId,
+        loggedAtDate,
+      ]);
 
-          if (existingRow) {
-            // Update existing weight entry
-            const dbRow = existingRow as {
-              id: string;
-              weight_kg: number;
-              logged_at: string;
-              created_at: string;
-            };
+      if (existingRow) {
+        // Update existing weight entry
+        await this.dbRun('UPDATE weights SET weight_kg = ? WHERE user_id = ? AND logged_at = ?', [
+          input.weightKg,
+          userId,
+          loggedAtDate,
+        ]);
 
-            this.db.run(
-              'UPDATE weights SET weight_kg = ? WHERE user_id = ? AND logged_at = ?',
-              [input.weightKg, userId, loggedAtDate],
-              function (updateError) {
-                if (updateError) {
-                  logger.error('Failed to update weight entry', updateError);
-                  reject(updateError);
-                } else {
-                  const weight: Weight = {
-                    id: dbRow.id,
-                    userId,
-                    weightKg: input.weightKg,
-                    loggedAt: new Date(dbRow.logged_at),
-                    createdAt: new Date(dbRow.created_at),
-                  };
-                  logger.info('Updated weight entry', {
-                    id: weight.id,
-                    weightKg: weight.weightKg,
-                    previousWeight: dbRow.weight_kg,
-                  });
-                  resolve(weight);
-                }
-              },
-            );
-          } else {
-            // Create new weight entry
-            const id = randomUUID();
-            const now = new Date().toISOString();
+        const weight: Weight = {
+          id: existingRow.id,
+          userId,
+          weightKg: input.weightKg,
+          loggedAt: new Date(existingRow.logged_at),
+          createdAt: new Date(existingRow.created_at),
+        };
 
-            const weight: Weight = {
-              id,
-              userId,
-              weightKg: input.weightKg,
-              loggedAt: new Date(loggedAtDate),
-              createdAt: new Date(now),
-            };
+        logger.info('Updated weight entry', {
+          id: weight.id,
+          weightKg: weight.weightKg,
+          previousWeight: existingRow.weight_kg,
+        });
+        return weight;
+      } else {
+        // Create new weight entry
+        const id = randomUUID();
+        const now = new Date().toISOString();
 
-            this.db.run(
-              `INSERT INTO weights (id, user_id, weight_kg, logged_at, created_at)
-               VALUES (?, ?, ?, ?, ?)`,
-              [weight.id, weight.userId, weight.weightKg, loggedAtDate, now],
-              function (insertError) {
-                if (insertError) {
-                  logger.error('Failed to create weight entry', insertError);
-                  reject(insertError);
-                } else {
-                  logger.info('Created weight entry', { id: weight.id, weightKg: weight.weightKg });
-                  resolve(weight);
-                }
-              },
-            );
-          }
-        },
-      );
-    });
+        const weight: Weight = {
+          id,
+          userId,
+          weightKg: input.weightKg,
+          loggedAt: new Date(loggedAtDate),
+          createdAt: new Date(now),
+        };
+
+        await this.dbRun(
+          `INSERT INTO weights (id, user_id, weight_kg, logged_at, created_at)
+           VALUES (?, ?, ?, ?, ?)`,
+          [weight.id, weight.userId, weight.weightKg, loggedAtDate, now],
+        );
+
+        logger.info('Created weight entry', { id: weight.id, weightKg: weight.weightKg });
+        return weight;
+      }
+    } catch (error) {
+      logger.error('Failed to create/update weight entry', error);
+      throw error;
+    }
   }
 
   async getMealsForDateRange(
@@ -269,44 +266,39 @@ export class Database {
       loggedAt: Date;
     }[]
   > {
-    return new Promise((resolve, reject) => {
-      const query = `
-        SELECT id, meal_name, calories, protein_grams, carbs_grams, fat_grams, logged_at
-        FROM meals 
-        WHERE user_id = ? AND logged_at BETWEEN ? AND ?
-        ORDER BY logged_at ASC
-      `;
+    const query = `
+      SELECT id, meal_name, calories, protein_grams, carbs_grams, fat_grams, logged_at
+      FROM meals 
+      WHERE user_id = ? AND logged_at BETWEEN ? AND ?
+      ORDER BY logged_at ASC
+    `;
 
-      this.db.all(query, [userId, startDate.toISOString(), endDate.toISOString()], (error, rows: unknown[]) => {
-        if (error) {
-          reject(error);
-          return;
-        }
+    try {
+      const rows = await this.dbAll<{
+        id: string;
+        meal_name: string;
+        calories: number;
+        protein_grams: number | null;
+        carbs_grams: number | null;
+        fat_grams: number | null;
+        logged_at: string;
+      }>(query, [userId, startDate.toISOString(), endDate.toISOString()]);
 
-        const meals = rows.map((row) => {
-          const dbRow = row as {
-            id: string;
-            meal_name: string;
-            calories: number;
-            protein_grams: number | null;
-            carbs_grams: number | null;
-            fat_grams: number | null;
-            logged_at: string;
-          };
-          return {
-            id: dbRow.id,
-            mealName: dbRow.meal_name,
-            calories: dbRow.calories,
-            proteinGrams: dbRow.protein_grams,
-            carbsGrams: dbRow.carbs_grams,
-            fatGrams: dbRow.fat_grams,
-            loggedAt: new Date(dbRow.logged_at),
-          };
-        });
+      const meals = rows.map((row) => ({
+        id: row.id,
+        mealName: row.meal_name,
+        calories: row.calories,
+        proteinGrams: row.protein_grams,
+        carbsGrams: row.carbs_grams,
+        fatGrams: row.fat_grams,
+        loggedAt: new Date(row.logged_at),
+      }));
 
-        resolve(meals);
-      });
-    });
+      return meals;
+    } catch (error) {
+      logger.error('Failed to get meals for date range', error);
+      throw error;
+    }
   }
 
   async getMealsInDateRange(
@@ -335,75 +327,113 @@ export class Database {
     weightKg: number;
     loggedAt: Date;
   }> {
-    return new Promise((resolve, reject) => {
-      const query = `
-        SELECT id, weight_kg, logged_at
-        FROM weights 
-        WHERE user_id = ? AND logged_at = ?
-      `;
+    const query = `
+      SELECT id, weight_kg, logged_at
+      FROM weights 
+      WHERE user_id = ? AND logged_at = ?
+    `;
 
-      this.db.get(query, [userId, date], (error, row: unknown) => {
-        if (error) {
-          reject(error);
-          return;
-        }
+    try {
+      const row = await this.dbGet<{
+        id: string;
+        weight_kg: number;
+        logged_at: string;
+      }>(query, [userId, date]);
 
-        if (!row) {
-          reject(new Error(`No weight found for date ${date}`));
-          return;
-        }
+      if (!row) {
+        throw new Error(`No weight found for date ${date}`);
+      }
 
-        const dbRow = row as {
-          id: string;
-          weight_kg: number;
-          logged_at: string;
-        };
-
-        resolve({
-          id: dbRow.id,
-          weightKg: dbRow.weight_kg,
-          loggedAt: new Date(dbRow.logged_at),
-        });
-      });
-    });
+      return {
+        id: row.id,
+        weightKg: row.weight_kg,
+        loggedAt: new Date(row.logged_at),
+      };
+    } catch (error) {
+      logger.error('Failed to get weight for date', error);
+      throw error;
+    }
   }
 
-  async getUserSettings(userId: string): Promise<UserSettings | null> {
-    return new Promise((resolve, reject) => {
-      const query = `
-        SELECT user_id, timezone, metabolic_rate, created_at, updated_at
-        FROM user_settings 
-        WHERE user_id = ?
-      `;
+  async getUserSettings(userId: string): Promise<UserSettings> {
+    const query = `
+      SELECT user_id, timezone, metabolic_rate, created_at, updated_at
+      FROM user_settings 
+      WHERE user_id = ?
+    `;
 
-      this.db.get(query, [userId], (error, row: unknown) => {
-        if (error) {
-          reject(error);
-          return;
-        }
+    try {
+      const row = await this.dbGet<{
+        user_id: string;
+        timezone: string;
+        metabolic_rate: number;
+        created_at: string;
+        updated_at: string;
+      }>(query, [userId]);
 
-        if (!row) {
-          resolve(null);
-          return;
-        }
+      if (!row) {
+        throw new Error(`User settings not found for user: ${userId}`);
+      }
 
-        const dbRow = row as {
-          user_id: string;
-          timezone: string;
-          metabolic_rate: number;
-          created_at: string;
-          updated_at: string;
-        };
+      return {
+        userId: row.user_id,
+        timezone: row.timezone,
+        metabolicRate: row.metabolic_rate,
+        createdAt: new Date(row.created_at),
+        updatedAt: new Date(row.updated_at),
+      };
+    } catch (error) {
+      logger.error('Failed to get user settings', error);
+      throw error;
+    }
+  }
 
-        resolve({
-          userId: dbRow.user_id,
-          timezone: dbRow.timezone,
-          metabolicRate: dbRow.metabolic_rate,
-          createdAt: new Date(dbRow.created_at),
-          updatedAt: new Date(dbRow.updated_at),
-        });
-      });
-    });
+  async updateUserSettings(
+    userId: string,
+    updates: {
+      timezone?: string;
+      metabolicRate?: number;
+    },
+  ): Promise<UserSettings> {
+    // Build dynamic update query
+    const updateFields: string[] = [];
+    const values: unknown[] = [];
+
+    if (updates.timezone !== undefined) {
+      updateFields.push('timezone = ?');
+      values.push(updates.timezone);
+    }
+
+    if (updates.metabolicRate !== undefined) {
+      updateFields.push('metabolic_rate = ?');
+      values.push(updates.metabolicRate);
+    }
+
+    if (updateFields.length === 0) {
+      // No updates provided, just return current settings
+      return await this.getUserSettings(userId);
+    }
+
+    updateFields.push('updated_at = ?');
+    values.push(new Date().toISOString());
+    values.push(userId);
+
+    const query = `
+      UPDATE user_settings 
+      SET ${updateFields.join(', ')} 
+      WHERE user_id = ?
+    `;
+
+    try {
+      await this.dbRun(query, values);
+      logger.info('Updated user settings', { userId, updates });
+
+      // Return updated settings
+      return await this.getUserSettings(userId);
+    } catch (error) {
+      logger.error('Failed to update user settings', error);
+      throw error;
+    }
   }
 
   async getRecentWeights(
@@ -416,49 +446,125 @@ export class Database {
       loggedAt: Date;
     }[]
   > {
-    return new Promise((resolve, reject) => {
-      const query = `
-        SELECT id, weight_kg, logged_at
-        FROM weights 
-        WHERE user_id = ?
-        ORDER BY logged_at DESC
-        LIMIT ?
-      `;
+    const query = `
+      SELECT id, weight_kg, logged_at
+      FROM weights 
+      WHERE user_id = ?
+      ORDER BY logged_at DESC
+      LIMIT ?
+    `;
 
-      this.db.all(query, [userId, limit], (error, rows: unknown[]) => {
-        if (error) {
-          reject(error);
-          return;
-        }
+    try {
+      const rows = await this.dbAll<{
+        id: string;
+        weight_kg: number;
+        logged_at: string;
+      }>(query, [userId, limit]);
 
-        const weights = rows.map((row) => {
-          const dbRow = row as {
-            id: string;
-            weight_kg: number;
-            logged_at: string;
-          };
-          return {
-            id: dbRow.id,
-            weightKg: dbRow.weight_kg,
-            loggedAt: new Date(dbRow.logged_at),
-          };
-        });
+      const weights = rows.map((row) => ({
+        id: row.id,
+        weightKg: row.weight_kg,
+        loggedAt: new Date(row.logged_at),
+      }));
 
-        resolve(weights);
-      });
-    });
+      return weights;
+    } catch (error) {
+      logger.error('Failed to get recent weights', error);
+      throw error;
+    }
+  }
+
+  async getDailyMealsForDateRange(
+    userId: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<
+    {
+      date: string;
+      totalCalories: number;
+      totalProtein: number;
+      totalCarbs: number;
+      totalFat: number;
+    }[]
+  > {
+    const query = `
+      SELECT 
+        DATE(m.logged_at) as meal_date,
+        SUM(m.calories) as total_calories,
+        SUM(COALESCE(m.protein_grams, 0)) as total_protein,
+        SUM(COALESCE(m.carbs_grams, 0)) as total_carbs,
+        SUM(COALESCE(m.fat_grams, 0)) as total_fat
+      FROM meals m
+      WHERE m.user_id = ? 
+        AND m.logged_at BETWEEN ? AND ?
+      GROUP BY DATE(m.logged_at)
+      ORDER BY DATE(m.logged_at) ASC
+    `;
+
+    const rows = await this.dbAll<{
+      meal_date: string;
+      total_calories: number;
+      total_protein: number;
+      total_carbs: number;
+      total_fat: number;
+    }>(query, [userId, startDate.toISOString(), endDate.toISOString()]);
+
+    return rows.map((row) => ({
+      date: row.meal_date,
+      totalCalories: row.total_calories,
+      totalProtein: row.total_protein,
+      totalCarbs: row.total_carbs,
+      totalFat: row.total_fat,
+    }));
+  }
+
+  async getWeightsForDateRange(
+    userId: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<
+    {
+      date: string;
+      weightKg: number;
+    }[]
+  > {
+    const query = `
+      SELECT 
+        w.logged_at as weight_date,
+        w.weight_kg
+      FROM weights w
+      WHERE w.user_id = ?
+        AND w.logged_at BETWEEN DATE(?) AND DATE(?)
+      ORDER BY w.logged_at ASC
+    `;
+
+    const rows = await this.dbAll<{
+      weight_date: string;
+      weight_kg: number;
+    }>(query, [userId, startDate.toISOString(), endDate.toISOString()]);
+
+    return rows.map((row) => ({
+      date: row.weight_date,
+      weightKg: row.weight_kg,
+    }));
   }
 
   async close(): Promise<void> {
-    return new Promise((resolve) => {
-      this.db.close((error) => {
-        if (error) {
-          logger.error('Error closing database', error);
-        } else {
-          logger.info('Database connection closed');
-        }
-        resolve();
+    try {
+      await new Promise<void>((resolve, reject) => {
+        this.db.close((error) => {
+          if (error) {
+            logger.error('Error closing database', error);
+            reject(error);
+          } else {
+            logger.info('Database connection closed');
+            resolve();
+          }
+        });
       });
-    });
+    } catch (error) {
+      // Log error but don't throw since we're closing anyway
+      logger.error('Error during database close', error);
+    }
   }
 }

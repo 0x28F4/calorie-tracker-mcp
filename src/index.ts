@@ -128,111 +128,6 @@ class McpServer {
       },
     );
 
-    // Register get_today_summary tool
-    this.server.registerTool(
-      'get_today_summary',
-      {
-        title: 'Get Today Summary',
-        description: 'Get summary of calories and nutrition for today',
-        inputSchema: {
-          date: z
-            .string()
-            .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format')
-            .optional()
-            .describe('Date to get summary for (YYYY-MM-DD format, optional, defaults to today)'),
-        },
-      },
-      async (args) => {
-        const userId = this.userId; // Bound to this instance!
-
-        try {
-          // Parse target date (default to today)
-          const targetDate = args.date ? new Date(args.date) : new Date();
-          const startDate = startOfDay(targetDate);
-          const endDate = endOfDay(targetDate);
-
-          // Ensure user exists
-          await this.database.ensureUserExists(userId);
-
-          // Get meals for the day
-          const meals = await this.database.getMealsInDateRange(userId, startDate, endDate);
-
-          // Get weight for the date (try exact date first, then most recent)
-          let weight;
-          try {
-            weight = await this.database.getWeightForDate(userId, format(targetDate, 'yyyy-MM-dd'));
-          } catch {
-            // If no weight for exact date, get the most recent weight
-            const recentWeights = await this.database.getRecentWeights(userId, 1);
-            weight = recentWeights.length > 0 ? recentWeights[0] : null;
-          }
-
-          // Calculate totals
-          const totalCalories = meals.reduce((total, meal) => total + meal.calories, 0);
-          const totalProtein = meals.reduce((total, meal) => total + (meal.proteinGrams ?? 0), 0);
-          const totalCarbs = meals.reduce((total, meal) => total + (meal.carbsGrams ?? 0), 0);
-          const totalFat = meals.reduce((total, meal) => total + (meal.fatGrams ?? 0), 0);
-
-          // Get user settings for metabolic rate
-          const userSettings = await this.database.getUserSettings(userId);
-          const metabolicRate = userSettings?.metabolicRate ?? 2000;
-          const deficit = metabolicRate - totalCalories;
-
-          // Format date for display
-          const dateDisplay = format(targetDate, 'MMMM do, yyyy');
-
-          // Build summary text
-          let summaryText = `📊 **Summary for ${dateDisplay}**\n\n`;
-          summaryText += `🔥 **Calories**: ${totalCalories} / ${metabolicRate} (${deficit > 0 ? 'deficit' : 'surplus'}: ${Math.abs(deficit)})\n`;
-
-          if (totalProtein > 0 || totalCarbs > 0 || totalFat > 0) {
-            summaryText += `📈 **Macros**: `;
-            const macros = [];
-            if (totalProtein > 0) macros.push(`${totalProtein.toFixed(1)}g protein`);
-            if (totalCarbs > 0) macros.push(`${totalCarbs.toFixed(1)}g carbs`);
-            if (totalFat > 0) macros.push(`${totalFat.toFixed(1)}g fat`);
-            summaryText += macros.join(', ') + '\n';
-          }
-
-          if (weight) {
-            const weightDate = weight.loggedAt instanceof Date ? weight.loggedAt : new Date(weight.loggedAt);
-            const weightDateDisplay = format(weightDate, 'MMM do');
-            summaryText += `⚖️ **Weight**: ${weight.weightKg}kg (${weightDateDisplay})\n`;
-          }
-
-          summaryText += `\n📋 **Meals** (${meals.length}):\n`;
-          if (meals.length === 0) {
-            summaryText += '• No meals logged';
-          } else {
-            meals.forEach((meal) => {
-              const mealTime = meal.loggedAt instanceof Date ? meal.loggedAt : new Date(meal.loggedAt);
-              const timeDisplay = format(mealTime, 'HH:mm');
-              summaryText += `• ${timeDisplay} - ${meal.mealName}: ${meal.calories} cal\n`;
-            });
-          }
-
-          return {
-            content: [
-              {
-                type: 'text',
-                text: summaryText,
-              },
-            ],
-          };
-        } catch (error) {
-          logger.error('Failed to get today summary via MCP tool', error);
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `❌ Failed to get summary: ${String(error)}`,
-              },
-            ],
-          };
-        }
-      },
-    );
-
     // Register check_weight tool
     this.server.registerTool(
       'check_weight',
@@ -343,6 +238,190 @@ class McpServer {
               {
                 type: 'text',
                 text: `❌ Failed to process weight check: ${String(error)}`,
+              },
+            ],
+          };
+        }
+      },
+    );
+
+    // Register update_user_settings tool
+    this.server.registerTool(
+      'update_user_settings',
+      {
+        title: 'Update User Settings',
+        description: 'Update user timezone and/or metabolic rate settings',
+        inputSchema: {
+          timezone: z.string().optional().describe('Timezone (e.g., "America/New_York", "UTC", "Europe/London")'),
+          metabolicRate: z
+            .number()
+            .min(0, 'Metabolic rate must be positive')
+            .optional()
+            .describe('Daily metabolic rate in calories'),
+        },
+      },
+      async (args) => {
+        const userId = this.userId; // Bound to this instance!
+
+        try {
+          // Ensure user exists
+          await this.database.ensureUserExists(userId);
+
+          // Update settings with provided values
+          const updatedSettings = await this.database.updateUserSettings(userId, {
+            timezone: args.timezone,
+            metabolicRate: args.metabolicRate,
+          });
+
+          logger.info('User settings updated successfully via MCP tool', { userId, updates: args });
+
+          // Build response text
+          let responseText = '✅ **User settings updated**\n\n';
+          if (args.timezone !== undefined) {
+            responseText += `🌍 **Timezone**: ${updatedSettings.timezone}\n`;
+          }
+          if (args.metabolicRate !== undefined) {
+            responseText += `🔥 **Metabolic rate**: ${updatedSettings.metabolicRate} calories/day\n`;
+          }
+
+          responseText += `\n📅 Last updated: ${format(updatedSettings.updatedAt, 'PPP')}`;
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: responseText,
+              },
+            ],
+          };
+        } catch (error) {
+          logger.error('Failed to update user settings via MCP tool', error);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `❌ Failed to update settings: ${String(error)}`,
+              },
+            ],
+          };
+        }
+      },
+    );
+
+    // Register get_summary tool
+    this.server.registerTool(
+      'get_summary',
+      {
+        title: 'Get Summary',
+        description: 'Get multi-day summary with daily statistics and totals in JSON format',
+        inputSchema: {
+          startDate: z
+            .string()
+            .regex(/^\d{4}-\d{2}-\d{2}$/, 'Start date must be in YYYY-MM-DD format')
+            .describe('Start date for the summary range (YYYY-MM-DD format)'),
+          endDate: z
+            .string()
+            .regex(/^\d{4}-\d{2}-\d{2}$/, 'End date must be in YYYY-MM-DD format')
+            .describe('End date for the summary range (YYYY-MM-DD format)'),
+          weightMovingAvgDays: z
+            .number()
+            .int()
+            .min(1)
+            .optional()
+            .describe('Number of days for weight moving average calculation (default: 3)'),
+        },
+      },
+      async (args) => {
+        const userId = this.userId; // Bound to this instance!
+
+        try {
+          // Parse dates
+          const startDate = startOfDay(new Date(args.startDate));
+          const endDate = endOfDay(new Date(args.endDate));
+
+          // Validate date range
+          if (startDate > endDate) {
+            throw new Error('Start date must be before or equal to end date');
+          }
+
+          // Ensure user exists
+          await this.database.ensureUserExists(userId);
+
+          // Get user settings for metabolic rate
+          const userSettings = await this.database.getUserSettings(userId);
+          const metabolicRate = userSettings.metabolicRate;
+
+          // Get daily meals and weights separately
+          const dailyMeals = await this.database.getDailyMealsForDateRange(userId, startDate, endDate);
+          const weightsInRange = await this.database.getWeightsForDateRange(userId, startDate, endDate);
+
+          // Create a map of dates to weights for efficient lookup
+          const weightMap = new Map<string, number>();
+          weightsInRange.forEach((weight) => {
+            weightMap.set(weight.date, weight.weightKg);
+          });
+
+          // Build daily stats by combining meals and weights
+          const dailyStats = dailyMeals.map((meal) => {
+            const deficit = metabolicRate - meal.totalCalories;
+            const weight = weightMap.get(meal.date) ?? null;
+
+            return {
+              date: meal.date,
+              totalCalories: meal.totalCalories,
+              deficit,
+              macros: {
+                protein: meal.totalProtein,
+                carbs: meal.totalCarbs,
+                fat: meal.totalFat,
+              },
+              weight,
+            };
+          });
+
+          // Calculate totals
+          const totalCalories = dailyStats.reduce((sum, day) => sum + day.totalCalories, 0);
+          const totalDeficit = dailyStats.reduce((sum, day) => sum + day.deficit, 0);
+
+          // Calculate proper moving average for weight
+          const movingAvgDays = args.weightMovingAvgDays ?? 3;
+          const weightsWithData = dailyStats.filter((day) => day.weight !== null);
+          const lastNWeights = weightsWithData.slice(-movingAvgDays); // Take last N weights (proper moving average)
+
+          const weightMovingAvg =
+            lastNWeights.length > 0
+              ? Math.round((lastNWeights.reduce((sum, day) => sum + (day.weight ?? 0), 0) / lastNWeights.length) * 10) /
+                10
+              : null;
+
+          // Build final summary
+          const finalSummary = {
+            dailyStats,
+            totalStats: {
+              totalCalories,
+              totalDeficit,
+              weightMovingAvg,
+            },
+          };
+
+          // Format date range for display
+          const dateRangeDisplay = `${format(startDate, 'MMM do')} - ${format(endDate, 'MMM do, yyyy')}`;
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `📊 **Summary Report: ${dateRangeDisplay}**\n\n\`\`\`json\n${JSON.stringify(finalSummary, null, 2)}\n\`\`\``,
+              },
+            ],
+          };
+        } catch (error) {
+          logger.error('Failed to get summary via MCP tool', error);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `❌ Failed to get summary: ${String(error)}`,
               },
             ],
           };
