@@ -14,6 +14,11 @@ const TRANSPORT_TYPE = process.env.TRANSPORT ?? 'stdio';
 const HTTP_PORT = parseInt(process.env.PORT ?? '3000', 10);
 const USER_ID = process.env.USER_ID;
 
+let database: Database | null = null;
+let httpServer: ReturnType<typeof express.application.listen> | null = null;
+const sessionServers: Record<string, McpServer> = {};
+const transports: Record<string, StreamableHTTPServerTransport> = {};
+
 // User-contextual MCP Server that binds a user ID to all tools
 class McpServer {
   private userId: string;
@@ -439,7 +444,7 @@ async function main(): Promise<void> {
     logger.info('App configuration loaded successfully');
 
     // Initialize database
-    const database = new Database(appConfig);
+    database = new Database(appConfig);
     await database.initialize();
 
     // Start server with selected transport
@@ -477,11 +482,6 @@ function startHTTPServer(database: Database): void {
       next();
     });
   }
-
-  // Store user-contextual servers by session ID
-  const sessionServers: Record<string, McpServer> = {};
-  // Store transports by session ID
-  const transports: Record<string, StreamableHTTPServerTransport> = {};
 
   // Health endpoint
   app.get('/health', (req: Request, res: Response) => {
@@ -599,33 +599,85 @@ function startHTTPServer(database: Database): void {
   });
 
   // Start HTTP server
-  const httpServer = app.listen(HTTP_PORT, () => {
+  httpServer = app.listen(HTTP_PORT, () => {
     logger.info('Calorie Tracker MCP Server started with HTTP transport', {
       port: HTTP_PORT,
       protocol: 'Streamable HTTP (2025-03-26)',
       endpoint: `http://localhost:${HTTP_PORT}/mcp`,
     });
   });
+}
 
-  // Graceful shutdown
-  process.on('SIGINT', () => {
-    logger.info('Received SIGINT, shutting down HTTP server gracefully...');
+// Graceful shutdown handler
+const handleShutdown = (signal: string) => {
+  logger.info(`Received ${signal}, shutting down gracefully...`);
 
+  // Stop accepting new connections if HTTP server is running
+  if (httpServer) {
     httpServer.close(() => {
-      logger.info('HTTP server stopped');
-      process.exit(0);
+      logger.info('HTTP server stopped accepting new connections');
+      cleanupResources();
     });
-  });
+  } else {
+    // For stdio transport, cleanup immediately
+    cleanupResources();
+  }
 
-  process.on('SIGTERM', () => {
-    logger.info('Received SIGTERM, shutting down HTTP server gracefully...');
+  // Force exit after 10 seconds if graceful shutdown takes too long
+  setTimeout(() => {
+    logger.error('Graceful shutdown timeout, forcing exit');
+    process.exit(1);
+  }, 10000);
+};
 
-    httpServer.close(() => {
-      logger.info('HTTP server stopped');
-      process.exit(0);
-    });
+// Cleanup function for all resources
+function cleanupResources(): void {
+  (async () => {
+    // Close all active transports
+    const sessionIds = Object.keys(transports);
+    if (sessionIds.length > 0) {
+      logger.info(`Closing ${sessionIds.length} active sessions...`);
+
+      for (const sessionId of sessionIds) {
+        try {
+          logger.info(`Closing transport for session ${sessionId}`);
+          const transport = transports[sessionId];
+          if (transport) {
+            await transport.close();
+            delete transports[sessionId];
+            delete sessionServers[sessionId];
+          }
+        } catch (error) {
+          logger.error(`Error closing transport for session ${sessionId}:`, error);
+        }
+      }
+    }
+
+    // Close database connection
+    if (database) {
+      try {
+        await database.closeDatabase();
+        logger.info('Database connection closed');
+      } catch (error) {
+        logger.error('Error closing database:', error);
+      }
+    }
+
+    logger.info('All resources cleaned up, exiting...');
+    process.exit(0);
+  })().catch((error) => {
+    logger.error('Error during cleanup:', error);
+    process.exit(1);
   });
 }
+
+// Register shutdown handlers
+process.on('SIGINT', () => {
+  handleShutdown('SIGINT');
+});
+process.on('SIGTERM', () => {
+  handleShutdown('SIGTERM');
+});
 
 main().catch((error) => {
   logger.error('Unhandled error:', error);
