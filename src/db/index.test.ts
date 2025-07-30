@@ -144,16 +144,6 @@ describe('Database', () => {
       expect(recent).toHaveLength(1);
       expect(recent[0]?.weightKg).toBe(75.5);
     });
-
-    test('getWeightForDate', async () => {
-      await database.createWeight(testUserId, {
-        weightKg: 75.5,
-        loggedAt: new Date('2024-01-01'),
-      });
-
-      const weight = await database.getWeightForDate(testUserId, '2024-01-01');
-      expect(weight.weightKg).toBe(75.5);
-    });
   });
 
   describe('Aggregations', () => {

@@ -358,18 +358,49 @@ class McpServer {
 
           // Get daily meals and weights separately
           const dailyMeals = await this.database.getDailyMealsForDateRange(userId, startDate, endDate);
-          const weightsInRange = await this.database.getWeightsForDateRange(userId, startDate, endDate);
+
+          // Get moving average configuration
+          const movingAvgDays = args.weightMovingAvgDays ?? 3;
+
+          // Fetch weights for extended range (N additional days before start date for moving average)
+          const extendedStartDate = new Date(startDate);
+          extendedStartDate.setDate(extendedStartDate.getDate() - movingAvgDays);
+          const weightsInExtendedRange = await this.database.getWeightsForDateRange(userId, extendedStartDate, endDate);
 
           // Create a map of dates to weights for efficient lookup
           const weightMap = new Map<string, number>();
-          weightsInRange.forEach((weight) => {
+          weightsInExtendedRange.forEach((weight) => {
             weightMap.set(weight.date, weight.weightKg);
           });
 
-          // Build daily stats by combining meals and weights
+          // Build daily stats by combining meals and weights with moving averages
           const dailyStats = dailyMeals.map((meal) => {
             const deficit = metabolicRate - meal.totalCalories;
-            const weight = weightMap.get(meal.date) ?? null;
+            const rawWeight = weightMap.get(meal.date) ?? null;
+
+            // Calculate moving average for this day
+            let weightMovingAvg: number | null = null;
+            if (rawWeight !== null) {
+              // Get all weights up to this date for moving average calculation
+              const currentDate = new Date(meal.date);
+              const relevantWeights: number[] = [];
+
+              // Look back N days from current date
+              for (let i = 0; i < movingAvgDays; i++) {
+                const lookbackDate = new Date(currentDate);
+                lookbackDate.setDate(lookbackDate.getDate() - i);
+                const dateStr = lookbackDate.toISOString().split('T')[0] ?? '';
+                const weight = weightMap.get(dateStr);
+                if (weight !== undefined) {
+                  relevantWeights.push(weight);
+                }
+              }
+
+              if (relevantWeights.length > 0) {
+                weightMovingAvg =
+                  Math.round((relevantWeights.reduce((sum, w) => sum + w, 0) / relevantWeights.length) * 10) / 10;
+              }
+            }
 
             return {
               date: meal.date,
@@ -380,7 +411,8 @@ class McpServer {
                 carbs: meal.totalCarbs,
                 fat: meal.totalFat,
               },
-              weight,
+              weight: rawWeight,
+              weightMovingAvg,
             };
           });
 
@@ -388,16 +420,24 @@ class McpServer {
           const totalCalories = dailyStats.reduce((sum, day) => sum + day.totalCalories, 0);
           const totalDeficit = dailyStats.reduce((sum, day) => sum + day.deficit, 0);
 
-          // Calculate proper moving average for weight
-          const movingAvgDays = args.weightMovingAvgDays ?? 3;
-          const weightsWithData = dailyStats.filter((day) => day.weight !== null);
-          const lastNWeights = weightsWithData.slice(-movingAvgDays); // Take last N weights (proper moving average)
+          // Calculate weight difference using moving averages from first and last days
+          let weightDifference: number | null = null;
+          const firstDayWithWeight = dailyStats.find((day) => day.weightMovingAvg !== null);
+          const lastDayWithWeight = dailyStats
+            .slice()
+            .reverse()
+            .find((day) => day.weightMovingAvg !== null);
 
-          const weightMovingAvg =
-            lastNWeights.length > 0
-              ? Math.round((lastNWeights.reduce((sum, day) => sum + (day.weight ?? 0), 0) / lastNWeights.length) * 10) /
-                10
-              : null;
+          if (
+            firstDayWithWeight?.weightMovingAvg !== null &&
+            lastDayWithWeight?.weightMovingAvg !== null &&
+            firstDayWithWeight !== undefined &&
+            lastDayWithWeight !== undefined
+          ) {
+            weightDifference =
+              Math.round(((lastDayWithWeight.weightMovingAvg ?? 0) - (firstDayWithWeight.weightMovingAvg ?? 0)) * 10) /
+              10;
+          }
 
           // Build final summary
           const finalSummary = {
@@ -405,7 +445,7 @@ class McpServer {
             totalStats: {
               totalCalories,
               totalDeficit,
-              weightMovingAvg,
+              weightDifference,
             },
           };
 

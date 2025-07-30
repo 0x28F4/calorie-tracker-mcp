@@ -299,42 +299,6 @@ export class Database {
     return this.getMealsForDateRange(userId, startDate, endDate);
   }
 
-  async getWeightForDate(
-    userId: string,
-    date: string,
-  ): Promise<{
-    id: string;
-    weightKg: number;
-    loggedAt: Date;
-  }> {
-    const query = `
-      SELECT id, weight_kg, logged_at
-      FROM weights 
-      WHERE user_id = ? AND logged_at = ?
-    `;
-
-    try {
-      const row = await this.db.get<{
-        id: string;
-        weight_kg: number;
-        logged_at: string;
-      }>(query, [userId, date]);
-
-      if (!row) {
-        throw new Error(`No weight found for date ${date}`);
-      }
-
-      return {
-        id: row.id,
-        weightKg: row.weight_kg,
-        loggedAt: new Date(row.logged_at),
-      };
-    } catch (error) {
-      logger.error('Failed to get weight for date', error);
-      throw error;
-    }
-  }
-
   async getUserSettings(userId: string): Promise<UserSettings> {
     const query = `
       SELECT user_id, timezone, metabolic_rate, created_at, updated_at
