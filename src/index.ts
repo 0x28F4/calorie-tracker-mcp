@@ -473,6 +473,156 @@ class McpServer {
         }
       },
     );
+
+    // Register calculate_metabolic_rate tool
+    this.server.registerTool(
+      'calculate_metabolic_rate',
+      {
+        title: 'Calculate Metabolic Rate',
+        description: 'Calculate metabolic rate from historical data using a 7-day analysis window',
+        inputSchema: {
+          startDate: z.string().describe('Start date for 7-day analysis window (ISO format: YYYY-MM-DD)'),
+          updateSettings: z
+            .boolean()
+            .optional()
+            .describe('Whether to update user settings with calculated rate (default: false)'),
+        },
+      },
+      async (args) => {
+        const userId = this.userId;
+
+        try {
+          // Parse start date and calculate 7-day window
+          const startDate = startOfDay(new Date(args.startDate));
+          const endDate = endOfDay(new Date(startDate));
+          endDate.setDate(endDate.getDate() + 6); // 7-day window
+
+          logger.info('Calculating metabolic rate', { userId, startDate, endDate });
+
+          // Ensure user exists
+          await this.database.ensureUserExists(userId);
+
+          // Get current user settings for comparison
+          const currentSettings = await this.database.getUserSettings(userId);
+
+          // Get daily meals and weights for the 7-day period
+          const dailyMeals = await this.database.getDailyMealsForDateRange(userId, startDate, endDate);
+
+          // Fetch weights with extended range for moving averages (3 days before)
+          const extendedStartDate = new Date(startDate);
+          extendedStartDate.setDate(extendedStartDate.getDate() - 3);
+          const weightsInExtendedRange = await this.database.getWeightsForDateRange(userId, extendedStartDate, endDate);
+
+          // Check if we have sufficient data
+          if (dailyMeals.length === 0) {
+            throw new Error('No meal data found for the specified 7-day period');
+          }
+
+          // Create weight map for efficient lookup
+          const weightMap = new Map<string, number>();
+          weightsInExtendedRange.forEach((weight) => {
+            weightMap.set(weight.date, weight.weightKg);
+          });
+
+          // Calculate moving averages for first and last days
+          const calculateMovingAvg = (date: Date): number | null => {
+            const relevantWeights: number[] = [];
+            for (let i = 0; i < 3; i++) {
+              const lookbackDate = new Date(date);
+              lookbackDate.setDate(lookbackDate.getDate() - i);
+              const dateStr = lookbackDate.toISOString().split('T')[0] ?? '';
+              const weight = weightMap.get(dateStr);
+              if (weight !== undefined) {
+                relevantWeights.push(weight);
+              }
+            }
+            return relevantWeights.length > 0
+              ? Math.round((relevantWeights.reduce((sum, w) => sum + w, 0) / relevantWeights.length) * 10) / 10
+              : null;
+          };
+
+          const firstDayMovingAvg = calculateMovingAvg(startDate);
+          const lastDayMovingAvg = calculateMovingAvg(endDate);
+
+          // Calculate weight change
+          let weightChange = 0;
+          if (firstDayMovingAvg !== null && lastDayMovingAvg !== null) {
+            weightChange = Math.round((lastDayMovingAvg - firstDayMovingAvg) * 10) / 10;
+          }
+
+          // Calculate average daily calories
+          const totalCalories = dailyMeals.reduce((sum, meal) => sum + meal.totalCalories, 0);
+          const averageDailyCalories = Math.round(totalCalories / dailyMeals.length);
+
+          // Calculate metabolic rate using weight change factor
+          // 1 kg = ~7700 calories, so daily factor = (weight change * 7700) / 7 days
+          const weightChangeFactor = Math.round((weightChange * 7700) / 7);
+          const calculatedMetabolicRate = averageDailyCalories + weightChangeFactor;
+
+          // Build response
+          const result = {
+            calculatedMetabolicRate,
+            analysisWindow: {
+              startDate: startDate.toISOString().split('T')[0],
+              endDate: endDate.toISOString().split('T')[0],
+              averageDailyCalories,
+              weightChange,
+              daysWithData: dailyMeals.length,
+            },
+            currentSettingRate: currentSettings.metabolicRate,
+          };
+
+          // Update settings if requested
+          let settingsUpdated = false;
+          if (args.updateSettings) {
+            await this.database.updateUserSettings(userId, {
+              metabolicRate: calculatedMetabolicRate,
+            });
+            settingsUpdated = true;
+          }
+
+          // Format response
+          const analysisText = `**Metabolic Rate Analysis (7-day window)**
+
+📊 **Results:**
+- **Calculated Rate**: ${calculatedMetabolicRate} cal/day
+- **Current Setting**: ${currentSettings.metabolicRate} cal/day
+- **Difference**: ${calculatedMetabolicRate - currentSettings.metabolicRate > 0 ? '+' : ''}${calculatedMetabolicRate - currentSettings.metabolicRate} cal/day
+
+📈 **Analysis Window**: ${result.analysisWindow.startDate} to ${result.analysisWindow.endDate}
+- **Average Daily Intake**: ${averageDailyCalories} calories
+- **Weight Change**: ${weightChange > 0 ? '+' : ''}${weightChange}kg
+- **Days with Data**: ${dailyMeals.length}/7
+
+💡 **Calculation**: Based on average intake (${averageDailyCalories}) + weight change factor (${weightChangeFactor})
+
+${settingsUpdated ? '✅ **Settings Updated**: Your metabolic rate has been updated to ' + calculatedMetabolicRate + ' cal/day' : ''}
+
+\`\`\`json
+${JSON.stringify(result, null, 2)}
+\`\`\``;
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: analysisText,
+              },
+            ],
+          };
+        } catch (error) {
+          logger.error('Failed to calculate metabolic rate', error);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `❌ Failed to calculate metabolic rate: ${String(error)}`,
+              },
+            ],
+          };
+        }
+      },
+    );
   }
 }
 

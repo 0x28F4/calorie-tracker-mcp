@@ -116,6 +116,7 @@ All data scoped by user_id with full multi-user support and session isolation.
 - [x] **check_weight**: Record/update daily weight entries  
 - [x] **update_user_settings**: Update timezone and metabolic rate
 - [x] **get_summary**: Multi-day summary with moving averages, daily stats, and weight difference analysis in JSON format
+- [x] **calculate_metabolic_rate**: Calculate metabolic rate from 7-day historical data with optional settings update
 - [ ] **list_recent_meals**: List recent meal entries
 - [ ] **update_meal**: Update existing meal entries
 - [ ] **delete_meal**: Delete meal entries
@@ -161,7 +162,7 @@ We chose TypeScript over Go because the official MCP SDK is TypeScript-first, pr
 - [ ] Design and implement meal presets system - brainstorm client preset discovery and usage patterns
 
 ### Analytics & Reporting
-- [ ] Metabolic rate calculation from historical data
+- [x] Metabolic rate calculation from historical data
 - [ ] Enhanced daily summary tool (any date)
 - [ ] Weight trend analysis with moving averages
 - [ ] Date range statistics tool
