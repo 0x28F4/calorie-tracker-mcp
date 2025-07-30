@@ -71,10 +71,10 @@ A calorie tracking system designed as a first-class citizen for chat agents (lik
 - **Build**: `npm run build` compiles TypeScript to JavaScript
 
 ### Analytics & Export
-- **CSV Export**: Primary export method
-- **Report Generation**: Text-based analytics reports
-- **Google Sheets**: Manual import via CSV (API integration later)
-- **Future Automation**: Planned analytics scheduling
+- **CSV Export**: SQLite native `.import` command
+- **Report Generation**: Enhanced summary reports with moving averages
+- **Moving Averages**: Configurable N-day weight trend smoothing
+- **Weight Trend Analysis**: First-to-last day difference calculations
 
 ## 🏗 Architecture Design
 
@@ -92,7 +92,8 @@ graph TB
     subgraph "MCP Tools"
         MCP --> AddMeal[add_meal]
         MCP --> CheckWeight[check_weight]
-        MCP --> Summary[get_today_summary]
+        MCP --> Summary[get_summary]
+        MCP --> Settings[update_user_settings]
     end
     
     subgraph "Future Export"
@@ -114,22 +115,20 @@ All data scoped by user_id with full multi-user support and session isolation.
 - [x] **add_meal**: Log meals with calories and optional macros
 - [x] **check_weight**: Record/update daily weight entries  
 - [x] **update_user_settings**: Update timezone and metabolic rate
-- [x] **get_summary**: Multi-day summary with daily stats and totals in JSON format
+- [x] **get_summary**: Multi-day summary with moving averages, daily stats, and weight difference analysis in JSON format
 - [ ] **list_recent_meals**: List recent meal entries
 - [ ] **update_meal**: Update existing meal entries
 - [ ] **delete_meal**: Delete meal entries
-- [ ] **get_weight_trend**: Moving averages and analytics
-- [ ] **export_csv**: Data export functionality
+- [ ] **export_csv**: Data export functionality (SQLite native support available)
 
 ## 🧪 Testing
 
 ### ✅ Current Testing
+- **Comprehensive test suite** with Vitest framework
+- **Database layer tests** with in-memory SQLite
+- **CI/CD integration** with automated testing
+- **Concurrent access testing** validated with multiple clients
 - Manual testing via Claude Desktop and MCP Inspector
-- Database operations validated with sample data
-
-### 🚧 Planned Testing  
-- Unit tests for database operations
-- Integration tests for MCP protocol compliance
 
 ## 📚 Documentation
 
@@ -140,11 +139,12 @@ All data scoped by user_id with full multi-user support and session isolation.
 ## ✅ Current Status
 
 - ✅ TypeScript project with MCP SDK
-- ✅ SQLite database with schema  
-- ✅ Core MCP tools functional
-- ✅ Dual transport support (stdio + HTTP)
-- ✅ User-contextual architecture with session isolation
-- ✅ Tested with Claude Desktop and MCP Inspector
+- ✅ SQLite database with schema and proper async/await patterns
+- ✅ Enhanced MCP tools with moving average calculations
+- ✅ Dual transport support (stdio + HTTP) with graceful shutdown
+- ✅ User-contextual architecture with concurrent access support
+- ✅ Comprehensive test coverage with CI/CD pipeline
+- ✅ Production-ready containerization with Docker
 
 ## 💡 Why TypeScript?
 
@@ -157,6 +157,7 @@ We chose TypeScript over Go because the official MCP SDK is TypeScript-first, pr
 ### Core Features
 - [x] Implement graceful shutdown with connection removals
 - [x] Test concurrent access through two different clients
+- [ ] Refactor index.ts - separate MCP server, HTTP transport, and main logic into focused modules
 - [ ] Design and implement meal presets system - brainstorm client preset discovery and usage patterns
 
 ### Analytics & Reporting
