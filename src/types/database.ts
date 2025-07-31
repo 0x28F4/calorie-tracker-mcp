@@ -41,7 +41,7 @@ export interface CreateMealInput {
 
 export interface CreateWeightInput {
   readonly weightKg: number;
-  readonly loggedAt?: Date; // Optional, defaults to today
+  readonly loggedAt: Date; // Required date field
 }
 
 export interface CreateUserSettingsInput {

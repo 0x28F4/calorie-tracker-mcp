@@ -180,67 +180,77 @@ export class Database {
     }
   }
 
-  async createWeight(userId: string, input: CreateWeightInput): Promise<Weight> {
-    const loggedAtDate = format(input.loggedAt ?? new Date(), 'yyyy-MM-dd');
+  async createWeights(userId: string, inputs: CreateWeightInput[]): Promise<Weight[]> {
+    const weights: Weight[] = [];
+
+    // Use a transaction for atomicity - all succeed or all fail
+    await this.db.run('BEGIN TRANSACTION');
 
     try {
-      // Check if weight already exists for this user and date
-      const existingRow = await this.db.get<{
-        id: string;
-        weight_kg: number;
-        logged_at: string;
-        created_at: string;
-      }>('SELECT id, weight_kg, logged_at, created_at FROM weights WHERE user_id = ? AND logged_at = ?', [
-        userId,
-        loggedAtDate,
-      ]);
+      for (const input of inputs) {
+        const loggedAtDate = format(input.loggedAt, 'yyyy-MM-dd');
 
-      if (existingRow) {
-        // Update existing weight entry
-        await this.db.run('UPDATE weights SET weight_kg = ? WHERE user_id = ? AND logged_at = ?', [
-          input.weightKg,
+        // Check if weight already exists for this user and date
+        const existingRow = await this.db.get<{
+          id: string;
+          weight_kg: number;
+          logged_at: string;
+          created_at: string;
+        }>('SELECT id, weight_kg, logged_at, created_at FROM weights WHERE user_id = ? AND logged_at = ?', [
           userId,
           loggedAtDate,
         ]);
 
-        const weight: Weight = {
-          id: existingRow.id,
-          userId,
-          weightKg: input.weightKg,
-          loggedAt: new Date(existingRow.logged_at),
-          createdAt: new Date(existingRow.created_at),
-        };
+        if (existingRow) {
+          // Update existing weight entry
+          await this.db.run('UPDATE weights SET weight_kg = ? WHERE user_id = ? AND logged_at = ?', [
+            input.weightKg,
+            userId,
+            loggedAtDate,
+          ]);
 
-        logger.info('Updated weight entry', {
-          id: weight.id,
-          weightKg: weight.weightKg,
-          previousWeight: existingRow.weight_kg,
-        });
-        return weight;
-      } else {
-        // Create new weight entry
-        const id = randomUUID();
-        const now = new Date().toISOString();
+          const weight: Weight = {
+            id: existingRow.id,
+            userId,
+            weightKg: input.weightKg,
+            loggedAt: new Date(loggedAtDate),
+            createdAt: new Date(existingRow.created_at),
+          };
 
-        const weight: Weight = {
-          id,
-          userId,
-          weightKg: input.weightKg,
-          loggedAt: new Date(loggedAtDate),
-          createdAt: new Date(now),
-        };
+          logger.info('Updated weight in batch', { id: weight.id, weightKg: weight.weightKg, loggedAt: loggedAtDate });
+          weights.push(weight);
+        } else {
+          // Create new weight entry
+          const id = randomUUID();
+          const now = new Date().toISOString();
 
-        await this.db.run(
-          `INSERT INTO weights (id, user_id, weight_kg, logged_at, created_at)
-           VALUES (?, ?, ?, ?, ?)`,
-          [weight.id, weight.userId, weight.weightKg, loggedAtDate, now],
-        );
+          await this.db.run(
+            'INSERT INTO weights (id, user_id, weight_kg, logged_at, created_at) VALUES (?, ?, ?, ?, ?)',
+            [id, userId, input.weightKg, loggedAtDate, now],
+          );
 
-        logger.info('Created weight entry', { id: weight.id, weightKg: weight.weightKg });
-        return weight;
+          const weight: Weight = {
+            id,
+            userId,
+            weightKg: input.weightKg,
+            loggedAt: new Date(loggedAtDate),
+            createdAt: new Date(now),
+          };
+
+          logger.info('Created weight in batch', { id: weight.id, weightKg: weight.weightKg, loggedAt: loggedAtDate });
+          weights.push(weight);
+        }
       }
+
+      // Commit the transaction
+      await this.db.run('COMMIT');
+      logger.info('Batch weight creation/update completed', { count: weights.length });
+
+      return weights;
     } catch (error) {
-      logger.error('Failed to create/update weight entry', error);
+      // Rollback on any error
+      await this.db.run('ROLLBACK');
+      logger.error('Batch weight creation/update failed, rolled back', error);
       throw error;
     }
   }

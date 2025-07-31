@@ -163,12 +163,16 @@ describe('Database', () => {
     });
 
     test('createWeight and getRecentWeights', async () => {
-      const weight = await database.createWeight(testUserId, {
-        weightKg: 75.5,
-        loggedAt: new Date('2024-01-01'),
-      });
+      const weights = await database.createWeights(testUserId, [
+        {
+          weightKg: 75.5,
+          loggedAt: new Date('2024-01-01'),
+        },
+      ]);
+      const weight = weights[0];
+      expect(weight).toBeDefined();
 
-      expect(weight.weightKg).toBe(75.5);
+      expect(weight!.weightKg).toBe(75.5);
 
       const recent = await database.getRecentWeights(testUserId, 5);
       expect(recent).toHaveLength(1);
@@ -176,21 +180,113 @@ describe('Database', () => {
     });
 
     test('createWeight updates existing weight for same date', async () => {
-      await database.createWeight(testUserId, {
-        weightKg: 75.0,
-        loggedAt: new Date('2024-01-01'),
-      });
+      await database.createWeights(testUserId, [
+        {
+          weightKg: 75.0,
+          loggedAt: new Date('2024-01-01'),
+        },
+      ]);
 
-      const updated = await database.createWeight(testUserId, {
-        weightKg: 75.5,
-        loggedAt: new Date('2024-01-01'),
-      });
+      const updatedWeights = await database.createWeights(testUserId, [
+        {
+          weightKg: 75.5,
+          loggedAt: new Date('2024-01-01'),
+        },
+      ]);
+      const updated = updatedWeights[0];
+      expect(updated).toBeDefined();
 
-      expect(updated.weightKg).toBe(75.5);
+      expect(updated!.weightKg).toBe(75.5);
 
       const recent = await database.getRecentWeights(testUserId, 5);
       expect(recent).toHaveLength(1);
       expect(recent[0]?.weightKg).toBe(75.5);
+    });
+
+    test('createWeights batch insert', async () => {
+      const weightsToCreate = [
+        {
+          weightKg: 75.5,
+          loggedAt: new Date('2024-01-01'),
+        },
+        {
+          weightKg: 75.2,
+          loggedAt: new Date('2024-01-02'),
+        },
+        {
+          weightKg: 74.8,
+          loggedAt: new Date('2024-01-03'),
+        },
+      ];
+
+      const createdWeights = await database.createWeights(testUserId, weightsToCreate);
+
+      expect(createdWeights).toHaveLength(3);
+      expect(createdWeights[0]?.weightKg).toBe(75.5);
+      expect(createdWeights[1]?.weightKg).toBe(75.2);
+      expect(createdWeights[2]?.weightKg).toBe(74.8);
+
+      // Verify they were actually saved
+      const recentWeights = await database.getRecentWeights(testUserId, 5);
+      expect(recentWeights).toHaveLength(3);
+      expect(recentWeights.map((w) => w.weightKg).sort()).toEqual([74.8, 75.2, 75.5]);
+    });
+
+    test('createWeights with empty array', async () => {
+      const createdWeights = await database.createWeights(testUserId, []);
+
+      expect(createdWeights).toHaveLength(0);
+    });
+
+    test('createWeights updates existing entries for same date', async () => {
+      // Create initial weight
+      await database.createWeights(testUserId, [
+        {
+          weightKg: 75.0,
+          loggedAt: new Date('2024-01-01'),
+        },
+      ]);
+
+      // Update same date with batch operation
+      const updatedWeights = await database.createWeights(testUserId, [
+        {
+          weightKg: 75.5,
+          loggedAt: new Date('2024-01-01'),
+        },
+      ]);
+
+      expect(updatedWeights).toHaveLength(1);
+      expect(updatedWeights[0]?.weightKg).toBe(75.5);
+
+      // Verify only one entry exists
+      const recentWeights = await database.getRecentWeights(testUserId, 5);
+      expect(recentWeights).toHaveLength(1);
+      expect(recentWeights[0]?.weightKg).toBe(75.5);
+    });
+
+    test('createWeights transaction rollback on error', async () => {
+      // Don't create the user to trigger a foreign key constraint error
+      const nonExistentUserId = 'non-existent-user';
+
+      const weightsToCreate = [
+        {
+          weightKg: 75.0,
+          loggedAt: new Date('2024-01-01'),
+        },
+        {
+          weightKg: 74.5,
+          loggedAt: new Date('2024-01-02'),
+        },
+      ];
+
+      // The entire transaction should fail due to foreign key constraint
+      await expect(database.createWeights(nonExistentUserId, weightsToCreate)).rejects.toThrow();
+
+      // Verify no weights were created for either user
+      await database.ensureUserExists(testUserId);
+      const recentWeights = await database.getRecentWeights(testUserId, 10);
+
+      expect(recentWeights).toHaveLength(0);
     });
   });
 
@@ -228,15 +324,16 @@ describe('Database', () => {
     });
 
     test('getWeightsForDateRange with 2 weights', async () => {
-      await database.createWeight(testUserId, {
-        weightKg: 75.0,
-        loggedAt: new Date('2024-01-01'),
-      });
-
-      await database.createWeight(testUserId, {
-        weightKg: 74.8,
-        loggedAt: new Date('2024-01-02'),
-      });
+      await database.createWeights(testUserId, [
+        {
+          weightKg: 75.0,
+          loggedAt: new Date('2024-01-01'),
+        },
+        {
+          weightKg: 74.8,
+          loggedAt: new Date('2024-01-02'),
+        },
+      ]);
 
       const startDate = new Date('2024-01-01T00:00:00Z');
       const endDate = new Date('2024-01-02T23:59:59Z');

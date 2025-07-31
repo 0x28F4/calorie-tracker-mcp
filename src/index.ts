@@ -153,24 +153,26 @@ class McpServer {
       },
     );
 
-    // Register check_weight tool
+    // Register add_weights tool
     this.server.registerTool(
-      'check_weight',
+      'add_weights',
       {
-        title: 'Check Weight',
+        title: 'Add Weights',
         description:
-          'Add/update a weight entry or check recent weight history. If a weight already exists for the date, it will be updated.',
+          'Add one or more weight entries to the calorie tracker with required timestamps. Updates existing entries for the same date.',
         inputSchema: {
-          weightKg: z
-            .number()
-            .min(0, 'Weight must be a positive number')
-            .optional()
-            .describe('Weight in kilograms to log (optional, if not provided will show recent history)'),
-          loggedAt: z
-            .string()
-            .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format')
-            .optional()
-            .describe('Date for weight entry (YYYY-MM-DD format, optional, defaults to today)'),
+          weights: z
+            .array(
+              z.object({
+                weightKg: z.number().min(0, 'Weight must be a positive number').describe('Weight in kilograms'),
+                loggedAt: z
+                  .string()
+                  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format')
+                  .describe('Date for weight entry (YYYY-MM-DD format)'),
+              }),
+            )
+            .min(1, 'At least one weight entry is required')
+            .describe('Array of weight entries to add'),
         },
       },
       async (args) => {
@@ -180,89 +182,42 @@ class McpServer {
           // Ensure user exists
           await this.database.ensureUserExists(userId);
 
-          if (args.weightKg !== undefined) {
-            // Add or update weight entry
-            const weight = await this.database.createWeight(userId, {
-              weightKg: args.weightKg,
-              loggedAt: args.loggedAt ? new Date(args.loggedAt) : new Date(),
-            });
-
-            logger.info('Weight logged successfully via MCP tool', {
-              weightId: weight.id,
+          // Create weight entries
+          const weights = await this.database.createWeights(
+            userId,
+            args.weights.map((weight) => ({
               weightKg: weight.weightKg,
-              userId,
-            });
+              loggedAt: new Date(weight.loggedAt),
+            })),
+          );
 
+          logger.info('Weights added successfully via MCP tool', { count: weights.length, userId });
+
+          // Format results
+          const results = weights.map((weight) => {
             const weightDate = weight.loggedAt instanceof Date ? weight.loggedAt : new Date(weight.loggedAt);
             const dateDisplay = format(weightDate, 'MMMM do, yyyy');
 
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `✅ Weight logged: ${weight.weightKg}kg for ${dateDisplay}`,
-                },
-              ],
-            };
-          } else {
-            // Show recent weight history
-            const recentWeights = await this.database.getRecentWeights(userId, 10);
+            return `✅ Weight logged: ${weight.weightKg}kg for ${dateDisplay}`;
+          });
 
-            if (recentWeights.length === 0) {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: '📊 No weight entries found. Add your first weight entry!',
-                  },
-                ],
-              };
-            }
+          const summary = `Successfully added ${weights.length} weight entr${weights.length > 1 ? 'ies' : 'y'}`;
 
-            let historyText = `📊 **Recent Weight History** (${recentWeights.length} entries):\n\n`;
-
-            recentWeights.forEach((weight, index) => {
-              const weightDate = weight.loggedAt instanceof Date ? weight.loggedAt : new Date(weight.loggedAt);
-              const dateDisplay = format(weightDate, 'MMM do, yyyy');
-              const isToday = format(weightDate, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
-              const todayMarker = isToday ? ' (today)' : '';
-
-              if (index === 0) {
-                historyText += `• **${dateDisplay}${todayMarker}**: ${weight.weightKg}kg ← Latest\n`;
-              } else {
-                const prevWeight = recentWeights[index - 1]?.weightKg ?? 0;
-                const change = weight.weightKg - prevWeight;
-                const changeText = change !== 0 ? ` (${change > 0 ? '+' : ''}${change.toFixed(1)}kg)` : '';
-                historyText += `• ${dateDisplay}${todayMarker}: ${weight.weightKg}kg${changeText}\n`;
-              }
-            });
-
-            // Add trend analysis if we have multiple entries
-            if (recentWeights.length >= 2) {
-              const latest = recentWeights[0]?.weightKg ?? 0;
-              const oldest = recentWeights[recentWeights.length - 1]?.weightKg ?? 0;
-              const totalChange = latest - oldest;
-              const trend = totalChange > 0 ? '📈 trending up' : totalChange < 0 ? '📉 trending down' : '➡️ stable';
-
-              historyText += `\n**Trend**: ${trend} (${totalChange > 0 ? '+' : ''}${totalChange.toFixed(1)}kg overall)`;
-            }
-
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: historyText,
-                },
-              ],
-            };
-          }
-        } catch (error) {
-          logger.error('Failed to process weight check via MCP tool', error);
           return {
             content: [
               {
                 type: 'text',
-                text: `❌ Failed to process weight check: ${String(error)}`,
+                text: `${results.join('\n\n')}\n\n${summary}`,
+              },
+            ],
+          };
+        } catch (error) {
+          logger.error('Failed to add weights via MCP tool', error);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `❌ Failed to add weights: ${error instanceof Error ? error.message : 'Unknown error'}`,
               },
             ],
           };
