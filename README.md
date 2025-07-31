@@ -13,7 +13,7 @@ A calorie tracking system designed as a first-class citizen for chat agents (lik
 - **Persistent Storage**: Database for long-term data retention
 
 ### 2. Tracking Capabilities
-- **Calorie Tracking**: Log meals with calorie information
+- **Batch Calorie Tracking**: Log single or multiple meals in one operation with atomic transactions
 - **Weight Check-ins**: Record daily weight measurements
 - **Historical Data Import**: Support CSV imports for existing data
 
@@ -90,7 +90,7 @@ graph TB
     end
     
     subgraph "MCP Tools"
-        MCP --> AddMeal[add_meal]
+        MCP --> AddMeals[add_meals]
         MCP --> CheckWeight[check_weight]
         MCP --> Summary[get_summary]
         MCP --> Settings[update_user_settings]
@@ -112,7 +112,7 @@ All data scoped by user_id with full multi-user support and session isolation.
 
 ## 🔧 MCP Tools
 
-- [x] **add_meal**: Log meals with calories and optional macros
+- [x] **add_meals**: **Batch meal addition** - Add one or more meals in a single transaction with atomic operations (arrays only)
 - [x] **check_weight**: Record/update daily weight entries  
 - [x] **update_user_settings**: Update timezone and metabolic rate
 - [x] **get_summary**: Multi-day summary with moving averages, daily stats, and weight difference analysis in JSON format
@@ -125,8 +125,8 @@ All data scoped by user_id with full multi-user support and session isolation.
 ## 🧪 Testing
 
 ### ✅ Current Testing
-- **Comprehensive test suite** with Vitest framework
-- **Database layer tests** with in-memory SQLite
+- **Comprehensive test suite** with Vitest framework including **batch meal operation tests**
+- **Database layer tests** with in-memory SQLite and transaction rollback validation
 - **CI/CD integration** with automated testing
 - **Concurrent access testing** validated with multiple clients
 - Manual testing via Claude Desktop and MCP Inspector
@@ -158,6 +158,7 @@ We chose TypeScript over Go because the official MCP SDK is TypeScript-first, pr
 ### Core Features
 - [x] Implement graceful shutdown with connection removals
 - [x] Test concurrent access through two different clients
+- [x] **Batch meal operations** - Replace add_meal with add_meals for atomic bulk insertions
 - [ ] Refactor index.ts - separate MCP server, HTTP transport, and main logic into focused modules
 - [ ] Design and implement meal presets system - brainstorm client preset discovery and usage patterns
 
