@@ -42,38 +42,48 @@ class McpServer {
   }
 
   private registerTools(): void {
-    // Register add_meal tool
+    // Register add_meals tool
     this.server.registerTool(
-      'add_meal',
+      'add_meals',
       {
-        title: 'Add Meal',
-        description: 'Add a meal entry to the calorie tracker',
+        title: 'Add Meals',
+        description: 'Add one or more meal entries to the calorie tracker',
         inputSchema: {
-          mealName: z
-            .string()
-            .min(1, 'Meal name is required')
-            .describe('Name of the meal (e.g., "Breakfast", "Chicken Salad")'),
-          calories: z.number().min(0, 'Calories must be a positive number').describe('Total calories in the meal'),
-          proteinGrams: z
-            .number()
-            .min(0, 'Protein must be a positive number')
-            .optional()
-            .describe('Protein content in grams (optional)'),
-          carbsGrams: z
-            .number()
-            .min(0, 'Carbs must be a positive number')
-            .optional()
-            .describe('Carbohydrate content in grams (optional)'),
-          fatGrams: z
-            .number()
-            .min(0, 'Fat must be a positive number')
-            .optional()
-            .describe('Fat content in grams (optional)'),
-          loggedAt: z
-            .string()
-            .datetime()
-            .optional()
-            .describe('ISO timestamp when meal was consumed (optional, defaults to now)'),
+          meals: z
+            .array(
+              z.object({
+                mealName: z
+                  .string()
+                  .min(1, 'Meal name is required')
+                  .describe('Name of the meal (e.g., "Breakfast", "Chicken Salad")'),
+                calories: z
+                  .number()
+                  .min(0, 'Calories must be a positive number')
+                  .describe('Total calories in the meal'),
+                proteinGrams: z
+                  .number()
+                  .min(0, 'Protein must be a positive number')
+                  .optional()
+                  .describe('Protein content in grams (optional)'),
+                carbsGrams: z
+                  .number()
+                  .min(0, 'Carbs must be a positive number')
+                  .optional()
+                  .describe('Carbohydrate content in grams (optional)'),
+                fatGrams: z
+                  .number()
+                  .min(0, 'Fat must be a positive number')
+                  .optional()
+                  .describe('Fat content in grams (optional)'),
+                loggedAt: z
+                  .string()
+                  .datetime()
+                  .optional()
+                  .describe('ISO timestamp when meal was consumed (optional, defaults to now)'),
+              }),
+            )
+            .min(1, 'At least one meal is required')
+            .describe('Array of meals to add'),
         },
       },
       async (args) => {
@@ -83,49 +93,59 @@ class McpServer {
           // Ensure user exists
           await this.database.ensureUserExists(userId);
 
-          // Create meal entry
-          const meal = await this.database.createMeal(userId, {
-            mealName: args.mealName,
-            calories: args.calories,
-            proteinGrams: args.proteinGrams,
-            carbsGrams: args.carbsGrams,
-            fatGrams: args.fatGrams,
-            loggedAt: args.loggedAt ? new Date(args.loggedAt) : undefined,
+          // Create meal entries
+          const meals = await this.database.createMeals(
+            userId,
+            args.meals.map((meal) => ({
+              mealName: meal.mealName,
+              calories: meal.calories,
+              proteinGrams: meal.proteinGrams,
+              carbsGrams: meal.carbsGrams,
+              fatGrams: meal.fatGrams,
+              loggedAt: meal.loggedAt ? new Date(meal.loggedAt) : undefined,
+            })),
+          );
+
+          logger.info('Meals added successfully via MCP tool', { count: meals.length, userId });
+
+          // Format results
+          const results = meals.map((meal) => {
+            // Format macros for display
+            const macros = [];
+            if (meal.proteinGrams !== null && meal.proteinGrams !== undefined) {
+              macros.push(`${meal.proteinGrams}g protein`);
+            }
+            if (meal.carbsGrams !== null && meal.carbsGrams !== undefined) {
+              macros.push(`${meal.carbsGrams}g carbs`);
+            }
+            if (meal.fatGrams !== null && meal.fatGrams !== undefined) {
+              macros.push(`${meal.fatGrams}g fat`);
+            }
+            const macroText = macros.length > 0 ? ` (${macros.join(', ')})` : '';
+
+            // Format the logged date
+            const loggedAtText = meal.loggedAt.toLocaleDateString();
+
+            return `✅ Added meal: ${meal.mealName} - ${meal.calories} calories${macroText}\nLogged for: ${loggedAtText}`;
           });
 
-          logger.info('Meal added successfully via MCP tool', { mealId: meal.id, mealName: meal.mealName, userId });
-
-          // Format macros for display
-          const macros = [];
-          if (meal.proteinGrams !== null && meal.proteinGrams !== undefined) {
-            macros.push(`${meal.proteinGrams}g protein`);
-          }
-          if (meal.carbsGrams !== null && meal.carbsGrams !== undefined) {
-            macros.push(`${meal.carbsGrams}g carbs`);
-          }
-          if (meal.fatGrams !== null && meal.fatGrams !== undefined) {
-            macros.push(`${meal.fatGrams}g fat`);
-          }
-          const macroText = macros.length > 0 ? ` (${macros.join(', ')})` : '';
-
-          // Format the logged date
-          const loggedAtText = meal.loggedAt.toLocaleDateString();
+          const summary = `Successfully added ${meals.length} meal${meals.length > 1 ? 's' : ''}`;
 
           return {
             content: [
               {
                 type: 'text',
-                text: `✅ Added meal: ${meal.mealName} - ${meal.calories} calories${macroText}\nLogged for: ${loggedAtText}`,
+                text: `${results.join('\n\n')}\n\n${summary}`,
               },
             ],
           };
         } catch (error) {
-          logger.error('Failed to add meal via MCP tool', error);
+          logger.error('Failed to add meals via MCP tool', error);
           return {
             content: [
               {
                 type: 'text',
-                text: `❌ Failed to add meal: ${String(error)}`,
+                text: `❌ Failed to add meals: ${error instanceof Error ? error.message : 'Unknown error'}`,
               },
             ],
           };

@@ -70,42 +70,90 @@ describe('Database', () => {
       await database.ensureUserExists(testUserId);
     });
 
-    test('createMeal and getMealsForDateRange', async () => {
+    test('createMeals batch insert', async () => {
+      await database.ensureUserExists(testUserId);
+
+      const mealsToCreate = [
+        {
+          mealName: 'Breakfast',
+          calories: 400,
+          proteinGrams: 20,
+          carbsGrams: 50,
+          fatGrams: 15,
+          loggedAt: new Date('2024-01-01T08:00:00Z'),
+        },
+        {
+          mealName: 'Lunch',
+          calories: 600,
+          proteinGrams: 30,
+          carbsGrams: 60,
+          fatGrams: 20,
+          loggedAt: new Date('2024-01-01T12:00:00Z'),
+        },
+        {
+          mealName: 'Dinner',
+          calories: 800,
+          proteinGrams: 40,
+          carbsGrams: 70,
+          fatGrams: 25,
+          loggedAt: new Date('2024-01-01T18:00:00Z'),
+        },
+      ];
+
+      const createdMeals = await database.createMeals(testUserId, mealsToCreate);
+
+      expect(createdMeals).toHaveLength(3);
+      expect(createdMeals[0]?.mealName).toBe('Breakfast');
+      expect(createdMeals[0]?.calories).toBe(400);
+      expect(createdMeals[1]?.mealName).toBe('Lunch');
+      expect(createdMeals[1]?.calories).toBe(600);
+      expect(createdMeals[2]?.mealName).toBe('Dinner');
+      expect(createdMeals[2]?.calories).toBe(800);
+
+      // Verify they were actually saved
       const startDate = new Date('2024-01-01T00:00:00Z');
       const endDate = new Date('2024-01-01T23:59:59Z');
+      const savedMeals = await database.getMealsForDateRange(testUserId, startDate, endDate);
 
-      const meal = await database.createMeal(testUserId, {
-        mealName: 'Breakfast',
-        calories: 400,
-        proteinGrams: 20,
-        carbsGrams: 50,
-        fatGrams: 15,
-        loggedAt: new Date('2024-01-01T08:00:00Z'),
-      });
-
-      expect(meal.mealName).toBe('Breakfast');
-      expect(meal.calories).toBe(400);
-
-      const meals = await database.getMealsForDateRange(testUserId, startDate, endDate);
-      expect(meals).toHaveLength(1);
-      expect(meals[0]?.mealName).toBe('Breakfast');
+      expect(savedMeals).toHaveLength(3);
+      expect(savedMeals.map((m) => m.mealName).sort()).toEqual(['Breakfast', 'Dinner', 'Lunch']);
     });
 
-    test('getMealsInDateRange is alias for getMealsForDateRange', async () => {
-      const startDate = new Date('2024-01-01T00:00:00Z');
-      const endDate = new Date('2024-01-01T23:59:59Z');
+    test('createMeals with empty array', async () => {
+      await database.ensureUserExists(testUserId);
 
-      await database.createMeal(testUserId, {
-        mealName: 'Lunch',
-        calories: 600,
-        loggedAt: new Date('2024-01-01T12:00:00Z'),
-      });
+      const createdMeals = await database.createMeals(testUserId, []);
 
-      const meals1 = await database.getMealsForDateRange(testUserId, startDate, endDate);
-      const meals2 = await database.getMealsInDateRange(testUserId, startDate, endDate);
+      expect(createdMeals).toHaveLength(0);
+    });
 
-      expect(meals1).toEqual(meals2);
-      expect(meals1).toHaveLength(1);
+    test('createMeals transaction rollback on error', async () => {
+      // Don't create the user to trigger a foreign key constraint error
+      const nonExistentUserId = 'non-existent-user';
+
+      const mealsToCreate = [
+        {
+          mealName: 'Valid Meal',
+          calories: 400,
+        },
+        {
+          mealName: 'Another Valid Meal',
+          calories: 500,
+        },
+      ];
+
+      // The entire transaction should fail due to foreign key constraint
+      await expect(database.createMeals(nonExistentUserId, mealsToCreate)).rejects.toThrow();
+
+      // Verify no meals were created for either user
+      await database.ensureUserExists(testUserId);
+      const savedMeals = await database.getMealsForDateRange(
+        testUserId,
+        new Date('2020-01-01'),
+        new Date('2030-01-01'),
+      );
+
+      expect(savedMeals).toHaveLength(0);
     });
   });
 
@@ -152,19 +200,20 @@ describe('Database', () => {
     });
 
     test('getDailyMealsForDateRange with 2 days', async () => {
-      await database.createMeal(testUserId, {
-        mealName: 'Breakfast',
-        calories: 400,
-        proteinGrams: 20,
-        loggedAt: new Date('2024-01-01T08:00:00Z'),
-      });
-
-      await database.createMeal(testUserId, {
-        mealName: 'Lunch',
-        calories: 600,
-        proteinGrams: 30,
-        loggedAt: new Date('2024-01-02T12:00:00Z'),
-      });
+      await database.createMeals(testUserId, [
+        {
+          mealName: 'Breakfast',
+          calories: 400,
+          proteinGrams: 20,
+          loggedAt: new Date('2024-01-01T08:00:00Z'),
+        },
+        {
+          mealName: 'Lunch',
+          calories: 600,
+          proteinGrams: 30,
+          loggedAt: new Date('2024-01-02T12:00:00Z'),
+        },
+      ]);
 
       const startDate = new Date('2024-01-01T00:00:00Z');
       const endDate = new Date('2024-01-02T23:59:59Z');

@@ -121,45 +121,61 @@ export class Database {
     }
   }
 
-  async createMeal(userId: string, input: CreateMealInput): Promise<Meal> {
-    const id = randomUUID();
-    const now = new Date().toISOString();
-    const loggedAt = (input.loggedAt ?? new Date()).toISOString();
+  async createMeals(userId: string, inputs: CreateMealInput[]): Promise<Meal[]> {
+    const meals: Meal[] = [];
 
-    const meal: Meal = {
-      id,
-      userId,
-      mealName: input.mealName,
-      calories: input.calories,
-      proteinGrams: input.proteinGrams,
-      carbsGrams: input.carbsGrams,
-      fatGrams: input.fatGrams,
-      loggedAt: new Date(loggedAt),
-      createdAt: new Date(now),
-      updatedAt: new Date(now),
-    };
+    // Use a transaction for atomicity - all succeed or all fail
+    await this.db.run('BEGIN TRANSACTION');
 
     try {
-      await this.db.run(
-        `INSERT INTO meals (id, user_id, meal_name, calories, protein_grams, carbs_grams, fat_grams, logged_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          meal.id,
-          meal.userId,
-          meal.mealName,
-          meal.calories,
-          meal.proteinGrams,
-          meal.carbsGrams,
-          meal.fatGrams,
-          loggedAt,
-          now,
-          now,
-        ],
-      );
-      logger.info('Created meal', { id: meal.id, mealName: meal.mealName });
-      return meal;
+      for (const input of inputs) {
+        const id = randomUUID();
+        const now = new Date().toISOString();
+        const loggedAt = (input.loggedAt ?? new Date()).toISOString();
+
+        const meal: Meal = {
+          id,
+          userId,
+          mealName: input.mealName,
+          calories: input.calories,
+          proteinGrams: input.proteinGrams,
+          carbsGrams: input.carbsGrams,
+          fatGrams: input.fatGrams,
+          loggedAt: new Date(loggedAt),
+          createdAt: new Date(now),
+          updatedAt: new Date(now),
+        };
+
+        await this.db.run(
+          `INSERT INTO meals (id, user_id, meal_name, calories, protein_grams, carbs_grams, fat_grams, logged_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            meal.id,
+            meal.userId,
+            meal.mealName,
+            meal.calories,
+            meal.proteinGrams,
+            meal.carbsGrams,
+            meal.fatGrams,
+            loggedAt,
+            now,
+            now,
+          ],
+        );
+
+        logger.info('Created meal in batch', { id: meal.id, mealName: meal.mealName });
+        meals.push(meal);
+      }
+
+      // Commit the transaction
+      await this.db.run('COMMIT');
+      logger.info('Batch meal creation completed', { count: meals.length });
+
+      return meals;
     } catch (error) {
-      logger.error('Failed to create meal', error);
+      // Rollback on any error
+      await this.db.run('ROLLBACK');
+      logger.error('Batch meal creation failed, rolled back', error);
       throw error;
     }
   }
@@ -279,24 +295,6 @@ export class Database {
       logger.error('Failed to get meals for date range', error);
       throw error;
     }
-  }
-
-  async getMealsInDateRange(
-    userId: string,
-    startDate: Date,
-    endDate: Date,
-  ): Promise<
-    {
-      id: string;
-      mealName: string;
-      calories: number;
-      proteinGrams: number | null;
-      carbsGrams: number | null;
-      fatGrams: number | null;
-      loggedAt: Date;
-    }[]
-  > {
-    return this.getMealsForDateRange(userId, startDate, endDate);
   }
 
   async getUserSettings(userId: string): Promise<UserSettings> {
