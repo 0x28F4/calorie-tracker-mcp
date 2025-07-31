@@ -166,7 +166,7 @@ describe('Database', () => {
       const weights = await database.createWeights(testUserId, [
         {
           weightKg: 75.5,
-          loggedAt: new Date('2024-01-01'),
+          loggedAt: '2024-01-01',
         },
       ]);
       const weight = weights[0];
@@ -183,14 +183,14 @@ describe('Database', () => {
       await database.createWeights(testUserId, [
         {
           weightKg: 75.0,
-          loggedAt: new Date('2024-01-01'),
+          loggedAt: '2024-01-01',
         },
       ]);
 
       const updatedWeights = await database.createWeights(testUserId, [
         {
           weightKg: 75.5,
-          loggedAt: new Date('2024-01-01'),
+          loggedAt: '2024-01-01',
         },
       ]);
       const updated = updatedWeights[0];
@@ -207,15 +207,15 @@ describe('Database', () => {
       const weightsToCreate = [
         {
           weightKg: 75.5,
-          loggedAt: new Date('2024-01-01'),
+          loggedAt: '2024-01-01',
         },
         {
           weightKg: 75.2,
-          loggedAt: new Date('2024-01-02'),
+          loggedAt: '2024-01-02',
         },
         {
           weightKg: 74.8,
-          loggedAt: new Date('2024-01-03'),
+          loggedAt: '2024-01-03',
         },
       ];
 
@@ -243,7 +243,7 @@ describe('Database', () => {
       await database.createWeights(testUserId, [
         {
           weightKg: 75.0,
-          loggedAt: new Date('2024-01-01'),
+          loggedAt: '2024-01-01',
         },
       ]);
 
@@ -251,7 +251,7 @@ describe('Database', () => {
       const updatedWeights = await database.createWeights(testUserId, [
         {
           weightKg: 75.5,
-          loggedAt: new Date('2024-01-01'),
+          loggedAt: '2024-01-01',
         },
       ]);
 
@@ -271,11 +271,11 @@ describe('Database', () => {
       const weightsToCreate = [
         {
           weightKg: 75.0,
-          loggedAt: new Date('2024-01-01'),
+          loggedAt: '2024-01-01',
         },
         {
           weightKg: 74.5,
-          loggedAt: new Date('2024-01-02'),
+          loggedAt: '2024-01-02',
         },
       ];
 
@@ -327,11 +327,11 @@ describe('Database', () => {
       await database.createWeights(testUserId, [
         {
           weightKg: 75.0,
-          loggedAt: new Date('2024-01-01'),
+          loggedAt: '2024-01-01',
         },
         {
           weightKg: 74.8,
-          loggedAt: new Date('2024-01-02'),
+          loggedAt: '2024-01-02',
         },
       ]);
 

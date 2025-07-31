@@ -1,7 +1,6 @@
 import { open, Database as SqliteDatabase } from 'sqlite';
 import sqlite3 from 'sqlite3';
 import { randomUUID } from 'crypto';
-import { format } from 'date-fns';
 import type { AppConfig } from '../types/config.js';
 import type {
   UserSettings,
@@ -188,7 +187,7 @@ export class Database {
 
     try {
       for (const input of inputs) {
-        const loggedAtDate = format(input.loggedAt, 'yyyy-MM-dd');
+        const loggedAtDate = input.loggedAt; // Already in YYYY-MM-DD format
 
         // Check if weight already exists for this user and date
         const existingRow = await this.db.get<{

@@ -168,7 +168,15 @@ class McpServer {
                 loggedAt: z
                   .string()
                   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format')
-                  .describe('Date for weight entry (YYYY-MM-DD format)'),
+                  .refine(
+                    (dateString) => {
+                      const date = new Date(dateString);
+                      // Check if it's a valid date and the string representation matches
+                      return !isNaN(date.getTime()) && date.toISOString().startsWith(dateString);
+                    },
+                    { message: 'Date must be a valid date in YYYY-MM-DD format' },
+                  )
+                  .describe('Date for weight entry (YYYY-MM-DD format, date only)'),
               }),
             )
             .min(1, 'At least one weight entry is required')
@@ -187,7 +195,7 @@ class McpServer {
             userId,
             args.weights.map((weight) => ({
               weightKg: weight.weightKg,
-              loggedAt: new Date(weight.loggedAt),
+              loggedAt: weight.loggedAt, // Pass date string directly
             })),
           );
 
