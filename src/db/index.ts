@@ -475,8 +475,8 @@ export class Database {
 
   async getWeightsForDateRange(
     userId: string,
-    startDate: Date,
-    endDate: Date,
+    startDate: string,
+    endDate: string,
   ): Promise<
     {
       date: string;
@@ -498,7 +498,7 @@ export class Database {
         weight_date: string;
         weight_kg: number;
       }[]
-    >(query, [userId, startDate.toISOString(), endDate.toISOString()]);
+    >(query, [userId, startDate, endDate]);
 
     return rows.map((row) => ({
       date: row.weight_date,

@@ -335,8 +335,8 @@ describe('Database', () => {
         },
       ]);
 
-      const startDate = new Date('2024-01-01T00:00:00Z');
-      const endDate = new Date('2024-01-02T23:59:59Z');
+      const startDate = '2024-01-01';
+      const endDate = '2024-01-02';
 
       const weights = await database.getWeightsForDateRange(testUserId, startDate, endDate);
 

@@ -1,6 +1,6 @@
 import { McpServer as BaseMcpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { startOfDay, endOfDay, format } from 'date-fns';
+import { addDays, format, startOfDay, endOfDay } from 'date-fns';
 import { logger } from '../utils/logger.js';
 import { Database } from '../db/index.js';
 
@@ -333,7 +333,13 @@ export class McpServer {
           // Fetch weights for extended range (N additional days before start date for moving average)
           const extendedStartDate = new Date(startDate);
           extendedStartDate.setDate(extendedStartDate.getDate() - movingAvgDays);
-          const weightsInExtendedRange = await this.database.getWeightsForDateRange(userId, extendedStartDate, endDate);
+          const extendedStartDateStr = format(extendedStartDate, 'yyyy-MM-dd');
+          const endDateStr = format(endDate, 'yyyy-MM-dd');
+          const weightsInExtendedRange = await this.database.getWeightsForDateRange(
+            userId,
+            extendedStartDateStr,
+            endDateStr,
+          );
 
           // Create a map of dates to weights for efficient lookup
           const weightMap = new Map<string, number>();
@@ -460,12 +466,18 @@ export class McpServer {
         const userId = this.userId;
 
         try {
-          // Parse start date and calculate 7-day window
-          const startDate = startOfDay(new Date(args.startDate));
-          const endDate = endOfDay(new Date(startDate));
-          endDate.setDate(endDate.getDate() + 6); // 7-day window
+          // Helper function for date-only operations
+          const addDaysToDateString = (dateStr: string, days: number): string => {
+            const date = new Date(dateStr + 'T12:00:00'); // Noon to avoid timezone edge cases
+            const newDate = addDays(date, days);
+            return format(newDate, 'yyyy-MM-dd');
+          };
 
-          logger.info('Calculating metabolic rate', { userId, startDate, endDate });
+          // Work with pure date strings
+          const startDateStr = args.startDate; // e.g. '2024-01-03'
+          const endDateStr = addDaysToDateString(startDateStr, 6); // 7-day window
+
+          logger.info('Calculating metabolic rate', { userId, startDateStr, endDateStr });
 
           // Ensure user exists
           await this.database.ensureUserExists(userId);
@@ -473,13 +485,18 @@ export class McpServer {
           // Get current user settings for comparison
           const currentSettings = await this.database.getUserSettings(userId);
 
-          // Get daily meals and weights for the 7-day period
-          const dailyMeals = await this.database.getDailyMealsForDateRange(userId, startDate, endDate);
+          // Get daily meals for the 7-day period
+          const startDateObj = new Date(startDateStr + 'T00:00:00Z');
+          const endDateObj = new Date(endDateStr + 'T23:59:59Z');
+          const dailyMeals = await this.database.getDailyMealsForDateRange(userId, startDateObj, endDateObj);
 
           // Fetch weights with extended range for moving averages (3 days before)
-          const extendedStartDate = new Date(startDate);
-          extendedStartDate.setDate(extendedStartDate.getDate() - 3);
-          const weightsInExtendedRange = await this.database.getWeightsForDateRange(userId, extendedStartDate, endDate);
+          const extendedStartDateStr = addDaysToDateString(startDateStr, -3);
+          const weightsInExtendedRange = await this.database.getWeightsForDateRange(
+            userId,
+            extendedStartDateStr,
+            endDateStr,
+          );
 
           // Check if we have sufficient data
           if (dailyMeals.length === 0) {
@@ -492,14 +509,13 @@ export class McpServer {
             weightMap.set(weight.date, weight.weightKg);
           });
 
-          // Calculate moving averages for first and last days
-          const calculateMovingAvg = (date: Date): number | null => {
+          // Calculate moving averages for first and last days using pure date strings
+          const calculateMovingAvg = (dateStr: string): number | null => {
             const relevantWeights: number[] = [];
+
             for (let i = 0; i < 3; i++) {
-              const lookbackDate = new Date(date);
-              lookbackDate.setDate(lookbackDate.getDate() - i);
-              const dateStr = lookbackDate.toISOString().split('T')[0] ?? '';
-              const weight = weightMap.get(dateStr);
+              const lookbackDateStr = addDaysToDateString(dateStr, -i);
+              const weight = weightMap.get(lookbackDateStr);
               if (weight !== undefined) {
                 relevantWeights.push(weight);
               }
@@ -509,8 +525,8 @@ export class McpServer {
               : null;
           };
 
-          const firstDayMovingAvg = calculateMovingAvg(startDate);
-          const lastDayMovingAvg = calculateMovingAvg(endDate);
+          const firstDayMovingAvg = calculateMovingAvg(startDateStr);
+          const lastDayMovingAvg = calculateMovingAvg(endDateStr);
 
           // Calculate weight change
           let weightChange = 0;
@@ -525,14 +541,14 @@ export class McpServer {
           // Calculate metabolic rate using weight change factor
           // 1 kg = ~7700 calories, so daily factor = (weight change * 7700) / 7 days
           const weightChangeFactor = Math.round((weightChange * 7700) / 7);
-          const calculatedMetabolicRate = averageDailyCalories + weightChangeFactor;
+          const calculatedMetabolicRate = averageDailyCalories - weightChangeFactor;
 
           // Build response
           const result = {
             calculatedMetabolicRate,
             analysisWindow: {
-              startDate: startDate.toISOString().split('T')[0],
-              endDate: endDate.toISOString().split('T')[0],
+              startDate: startDateStr,
+              endDate: endDateStr,
               averageDailyCalories,
               weightChange,
               daysWithData: dailyMeals.length,
