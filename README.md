@@ -14,7 +14,7 @@ A calorie tracking system designed as a first-class citizen for chat agents (lik
 
 ### 2. Tracking Capabilities
 - **Batch Calorie Tracking**: Log single or multiple meals in one operation with atomic transactions
-- **Weight Check-ins**: Record daily weight measurements
+- **Weight Management**: Record daily weight measurements with batch operations and date validation
 - **Historical Data Import**: Support CSV imports for existing data
 
 ### 3. Analytics Features
@@ -113,10 +113,10 @@ All data scoped by user_id with full multi-user support and session isolation.
 ## 🔧 MCP Tools
 
 - [x] **add_meals**: **Batch meal addition** - Add one or more meals in a single transaction with atomic operations (arrays only)
-- [x] **check_weight**: Record/update daily weight entries  
+- [x] **add_weights**: **Batch weight tracking** - Add one or more weight entries with date validation and duplicate handling
 - [x] **update_user_settings**: Update timezone and metabolic rate
 - [x] **get_summary**: Multi-day summary with moving averages, daily stats, and weight difference analysis in JSON format
-- [x] **calculate_metabolic_rate**: Calculate metabolic rate from 7-day historical data with optional settings update
+- [x] **calculate_metabolic_rate**: Calculate metabolic rate from 7-day historical data with 3-day moving averages and optional settings update
 - [ ] **list_recent_meals**: List recent meal entries
 - [ ] **update_meal**: Update existing meal entries
 - [ ] **delete_meal**: Delete meal entries
@@ -127,7 +127,9 @@ All data scoped by user_id with full multi-user support and session isolation.
 ### ✅ Current Testing
 - **Comprehensive test suite** with Vitest framework including **batch meal operation tests**
 - **Database layer tests** with in-memory SQLite and transaction rollback validation
-- **CI/CD integration** with automated testing
+- **MCP server integration tests** with InMemoryTransport for client-server communication testing
+- **Metabolic rate calculation tests** with type-safe result validation helpers
+- **CI/CD integration** with automated testing pipeline
 - **Concurrent access testing** validated with multiple clients
 - Manual testing via Claude Desktop and MCP Inspector
 
@@ -159,8 +161,8 @@ We chose TypeScript over Go because the official MCP SDK is TypeScript-first, pr
 - [x] Implement graceful shutdown with connection removals
 - [x] Test concurrent access through two different clients
 - [x] **Batch meal operations** - Replace add_meal with add_meals for atomic bulk insertions
-- [ ] Refactor index.ts - separate MCP server, HTTP transport, and main logic into focused modules
-- [ ] Design and implement meal presets system - brainstorm client preset discovery and usage patterns
+- [x] **Refactor index.ts** - Separate MCP server implementation into dedicated module (src/mcp/index.ts)
+- [x] **Meal presets system** - Solved via CLAUDE.md context instructions to keep recent meals in context (no new tools needed)
 
 ### Analytics & Reporting
 - [x] Metabolic rate calculation from historical data
@@ -173,6 +175,8 @@ We chose TypeScript over Go because the official MCP SDK is TypeScript-first, pr
 ### Testing & Quality
 - [x] Set up Vitest testing framework with in-memory SQLite
 - [x] Write comprehensive database layer tests
+- [x] **MCP server integration tests** with InMemoryTransport and type-safe result validation
+- [x] **Metabolic rate calculation testing** with live data validation
 - [x] Add tests to CI/CD pipeline
 
 ### Production & Deployment
