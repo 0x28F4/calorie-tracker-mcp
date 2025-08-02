@@ -1,6 +1,12 @@
-import { describe, test, expect, beforeEach, afterEach } from 'vitest';
+import { describe, test, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { Database } from './index.js';
 import type { AppConfig } from '../types/config.js';
+import { configureLogger, NoopLogger } from '../utils/logger.js';
+
+// Configure logger to use NoopLogger for all tests
+beforeAll(() => {
+  configureLogger(new NoopLogger());
+});
 
 describe('Database', () => {
   let database: Database;

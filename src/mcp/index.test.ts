@@ -1,10 +1,16 @@
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect, beforeAll } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { randomUUID } from 'crypto';
 import { McpServer } from './index.js';
 import { Database } from '../db/index.js';
 import type { AppConfig } from '../types/config.js';
+import { configureLogger, NoopLogger } from '../utils/logger.js';
+
+// Configure logger to use NoopLogger for all tests
+beforeAll(() => {
+  configureLogger(new NoopLogger());
+});
 
 // Helper type for text content
 interface TextContent {
@@ -133,7 +139,6 @@ describe('McpServer', () => {
       name: 'calculate_metabolic_rate',
       arguments: {
         startDate: '2024-01-03',
-        updateSettings: false,
       },
     });
 

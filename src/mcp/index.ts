@@ -456,10 +456,6 @@ export class McpServer {
         description: 'Calculate metabolic rate from historical data using a 7-day analysis window',
         inputSchema: {
           startDate: z.string().describe('Start date for 7-day analysis window (ISO format: YYYY-MM-DD)'),
-          updateSettings: z
-            .boolean()
-            .optional()
-            .describe('Whether to update user settings with calculated rate (default: false)'),
         },
       },
       async (args) => {
@@ -556,15 +552,6 @@ export class McpServer {
             currentSettingRate: currentSettings.metabolicRate,
           };
 
-          // Update settings if requested
-          let settingsUpdated = false;
-          if (args.updateSettings) {
-            await this.database.updateUserSettings(userId, {
-              metabolicRate: calculatedMetabolicRate,
-            });
-            settingsUpdated = true;
-          }
-
           // Format response
           const analysisText = `**Metabolic Rate Analysis (7-day window)**
 
@@ -580,7 +567,7 @@ export class McpServer {
 
 💡 **Calculation**: Based on average intake (${averageDailyCalories}) + weight change factor (${weightChangeFactor})
 
-${settingsUpdated ? '✅ **Settings Updated**: Your metabolic rate has been updated to ' + calculatedMetabolicRate + ' cal/day' : ''}
+
 
 \`\`\`json
 ${JSON.stringify(result, null, 2)}

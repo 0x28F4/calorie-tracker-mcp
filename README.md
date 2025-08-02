@@ -116,7 +116,7 @@ All data scoped by user_id with full multi-user support and session isolation.
 - [x] **add_weights**: **Batch weight tracking** - Add one or more weight entries with date validation and duplicate handling
 - [x] **update_user_settings**: Update timezone and metabolic rate
 - [x] **get_summary**: Multi-day summary with moving averages, daily stats, and weight difference analysis in JSON format
-- [x] **calculate_metabolic_rate**: Calculate metabolic rate from 7-day historical data with 3-day moving averages and optional settings update
+- [x] **calculate_metabolic_rate**: Calculate metabolic rate from 7-day historical data with 3-day moving averages (pure calculation tool)
 - [ ] **list_recent_meals**: List recent meal entries
 - [ ] **update_meal**: Update existing meal entries
 - [ ] **delete_meal**: Delete meal entries

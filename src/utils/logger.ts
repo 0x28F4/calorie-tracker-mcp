@@ -46,6 +46,44 @@ class FileLogger implements Logger {
   }
 }
 
-// Create logger with log file in data directory
-const logFile = join(process.cwd(), 'data', 'calorie_tracker.log');
-export const logger: Logger = new FileLogger(logFile);
+class NoopLogger implements Logger {
+  info(_message: string, ..._args: unknown[]): void {
+    // No-op for tests
+  }
+
+  warn(_message: string, ..._args: unknown[]): void {
+    // No-op for tests
+  }
+
+  error(_message: string, ..._args: unknown[]): void {
+    // No-op for tests
+  }
+}
+
+// Singleton logger instance
+let loggerInstance: Logger;
+
+// Initialize with default file logger
+const defaultLogFile = join(process.cwd(), 'data', 'calorie_tracker.log');
+loggerInstance = new FileLogger(defaultLogFile);
+
+// Configure the global logger (useful for tests)
+export function configureLogger(newLogger: Logger): void {
+  loggerInstance = newLogger;
+}
+
+// Export singleton logger
+export const logger: Logger = {
+  info: (message: string, ...args: unknown[]): void => {
+    loggerInstance.info(message, ...args);
+  },
+  warn: (message: string, ...args: unknown[]): void => {
+    loggerInstance.warn(message, ...args);
+  },
+  error: (message: string, ...args: unknown[]): void => {
+    loggerInstance.error(message, ...args);
+  },
+};
+
+// Export NoopLogger for test usage
+export { NoopLogger };
