@@ -225,6 +225,61 @@ export class McpServer {
       },
     );
 
+    // Register delete_meal tool
+    this.server.registerTool(
+      'delete_meal',
+      {
+        title: 'Delete Meal',
+        description: 'Delete a meal entry by its ID',
+        inputSchema: {
+          mealId: z.string().min(1).describe('ID of the meal to delete (use list_meals to get IDs)'),
+        },
+      },
+      async (args) => {
+        const userId = this.userId;
+        const { mealId } = args;
+
+        try {
+          // Ensure user exists
+          await this.database.ensureUserExists(userId);
+
+          // Delete the meal
+          const deleted = await this.database.deleteMeal(userId, mealId);
+
+          if (deleted) {
+            logger.info('Deleted meal successfully via MCP tool', { mealId, userId });
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `✅ Meal deleted successfully (ID: ${mealId})`,
+                },
+              ],
+            };
+          } else {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `⚠️ Meal not found or you don't have permission to delete it (ID: ${mealId})`,
+                },
+              ],
+            };
+          }
+        } catch (error) {
+          logger.error('Failed to delete meal via MCP tool', error);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `❌ Failed to delete meal: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              },
+            ],
+          };
+        }
+      },
+    );
+
     // Register add_weights tool
     this.server.registerTool(
       'add_weights',

@@ -158,4 +158,84 @@ describe('McpServer', () => {
     await client.close();
     await database.closeDatabase();
   });
+
+  test('list_meals - lists recent meals with IDs', async () => {
+    const { client, database } = await setupMcpClient();
+
+    // Add some test meals first
+    await client.callTool({
+      name: 'add_meals',
+      arguments: {
+        meals: [
+          { mealName: 'Breakfast', calories: 400 },
+          { mealName: 'Lunch', calories: 600 },
+          { mealName: 'Dinner', calories: 800 },
+        ],
+      },
+    });
+
+    // List meals
+    const result = await client.callTool({
+      name: 'list_meals',
+      arguments: { limit: 2 },
+    });
+    const content = result.content[0];
+    
+    expect(content.type).toBe('text');
+    expect(content.text).toContain('Recent Meals');
+    expect(content.text).toContain('showing 2 of last 2');
+    expect(content.text).toContain('calories'); // Check for calories
+    expect(content.text).toContain('ID:'); // Check that IDs are included
+    
+    // Cleanup
+    await client.close();
+    await database.closeDatabase();
+  });
+
+  test('delete_meal - deletes a meal by ID', async () => {
+    const { client, database } = await setupMcpClient();
+
+    // Add a test meal
+    await client.callTool({
+      name: 'add_meals',
+      arguments: {
+        meals: [{ mealName: 'Test Meal', calories: 500 }],
+      },
+    });
+
+    // List to get the meal ID
+    const listResult = await client.callTool({
+      name: 'list_meals',
+      arguments: { limit: 1 },
+    });
+    const listText = listResult.content[0].text;
+    
+    // Extract meal ID from the output (assumes format "ID: <uuid>")
+    const idMatch = listText.match(/ID: ([a-f0-9-]+)/);
+    expect(idMatch).toBeTruthy();
+    const mealId = idMatch![1];
+
+    // Delete the meal
+    const deleteResult = await client.callTool({
+      name: 'delete_meal',
+      arguments: { mealId },
+    });
+    const deleteContent = deleteResult.content[0];
+    
+    expect(deleteContent.type).toBe('text');
+    expect(deleteContent.text).toContain('✅ Meal deleted successfully');
+    expect(deleteContent.text).toContain(mealId);
+
+    // Verify it's gone
+    const verifyResult = await client.callTool({
+      name: 'list_meals',
+      arguments: { limit: 10 },
+    });
+    const verifyText = verifyResult.content[0].text;
+    expect(verifyText).toContain('No meals found');
+    
+    // Cleanup
+    await client.close();
+    await database.closeDatabase();
+  });
 });

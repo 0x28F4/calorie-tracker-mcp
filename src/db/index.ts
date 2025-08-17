@@ -473,6 +473,28 @@ export class Database {
     }
   }
 
+  async deleteMeal(userId: string, mealId: string): Promise<boolean> {
+    const query = `
+      DELETE FROM meals 
+      WHERE id = ? AND user_id = ?
+    `;
+
+    try {
+      const result = await this.db.run(query, [mealId, userId]);
+
+      if (result.changes && result.changes > 0) {
+        logger.info('Deleted meal successfully', { mealId, userId });
+        return true;
+      } else {
+        logger.warn('Meal not found or unauthorized', { mealId, userId });
+        return false;
+      }
+    } catch (error) {
+      logger.error('Failed to delete meal', { mealId, userId, error });
+      throw error;
+    }
+  }
+
   async getDailyMealsForDateRange(
     userId: string,
     startDate: Date,
