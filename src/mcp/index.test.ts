@@ -179,14 +179,15 @@ describe('McpServer', () => {
       name: 'list_meals',
       arguments: { limit: 2 },
     });
-    const content = result.content[0];
-    
+    const typedResult = assertTextResult(result);
+    const content = typedResult.content[0];
+
     expect(content.type).toBe('text');
     expect(content.text).toContain('Recent Meals');
     expect(content.text).toContain('showing 2 of last 2');
     expect(content.text).toContain('calories'); // Check for calories
     expect(content.text).toContain('ID:'); // Check that IDs are included
-    
+
     // Cleanup
     await client.close();
     await database.closeDatabase();
@@ -208,10 +209,11 @@ describe('McpServer', () => {
       name: 'list_meals',
       arguments: { limit: 1 },
     });
-    const listText = listResult.content[0].text;
-    
+    const typedListResult = assertTextResult(listResult);
+    const listText = typedListResult.content[0].text;
+
     // Extract meal ID from the output (assumes format "ID: <uuid>")
-    const idMatch = listText.match(/ID: ([a-f0-9-]+)/);
+    const idMatch = /ID: ([a-f0-9-]+)/.exec(listText);
     expect(idMatch).toBeTruthy();
     const mealId = idMatch![1];
 
@@ -220,8 +222,9 @@ describe('McpServer', () => {
       name: 'delete_meal',
       arguments: { mealId },
     });
-    const deleteContent = deleteResult.content[0];
-    
+    const typedDeleteResult = assertTextResult(deleteResult);
+    const deleteContent = typedDeleteResult.content[0];
+
     expect(deleteContent.type).toBe('text');
     expect(deleteContent.text).toContain('✅ Meal deleted successfully');
     expect(deleteContent.text).toContain(mealId);
@@ -231,9 +234,10 @@ describe('McpServer', () => {
       name: 'list_meals',
       arguments: { limit: 10 },
     });
-    const verifyText = verifyResult.content[0].text;
+    const typedVerifyResult = assertTextResult(verifyResult);
+    const verifyText = typedVerifyResult.content[0].text;
     expect(verifyText).toContain('No meals found');
-    
+
     // Cleanup
     await client.close();
     await database.closeDatabase();
