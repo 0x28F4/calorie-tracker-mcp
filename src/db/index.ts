@@ -427,6 +427,52 @@ export class Database {
     }
   }
 
+  async getRecentMeals(userId: string, limit = 10): Promise<Meal[]> {
+    const query = `
+      SELECT id, user_id, meal_name, calories, protein_grams, carbs_grams, fat_grams, logged_at, created_at, updated_at
+      FROM meals 
+      WHERE user_id = ?
+      ORDER BY logged_at DESC
+      LIMIT ?
+    `;
+
+    try {
+      const rows = await this.db.all<
+        {
+          id: string;
+          user_id: string;
+          meal_name: string;
+          calories: number;
+          protein_grams: number | null;
+          carbs_grams: number | null;
+          fat_grams: number | null;
+          logged_at: string;
+          created_at: string;
+          updated_at: string;
+        }[]
+      >(query, [userId, limit]);
+
+      const meals = rows.map((row) => ({
+        id: row.id,
+        userId: row.user_id,
+        mealName: row.meal_name,
+        calories: row.calories,
+        proteinGrams: row.protein_grams ?? undefined,
+        carbsGrams: row.carbs_grams ?? undefined,
+        fatGrams: row.fat_grams ?? undefined,
+        loggedAt: new Date(row.logged_at),
+        createdAt: new Date(row.created_at),
+        updatedAt: new Date(row.updated_at),
+      }));
+
+      logger.info('Retrieved recent meals', { userId, count: meals.length });
+      return meals;
+    } catch (error) {
+      logger.error('Failed to get recent meals', error);
+      throw error;
+    }
+  }
+
   async getDailyMealsForDateRange(
     userId: string,
     startDate: Date,

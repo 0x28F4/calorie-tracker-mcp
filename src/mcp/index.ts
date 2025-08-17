@@ -138,6 +138,93 @@ export class McpServer {
       },
     );
 
+    // Register list_meals tool
+    this.server.registerTool(
+      'list_meals',
+      {
+        title: 'List Meals',
+        description: 'List recent meal entries with their IDs',
+        inputSchema: {
+          limit: z
+            .number()
+            .int()
+            .min(1)
+            .max(100)
+            .optional()
+            .describe('Number of meals to return (default: 10, max: 100)'),
+        },
+      },
+      async (args) => {
+        const userId = this.userId;
+        const limit = args.limit ?? 10;
+
+        try {
+          // Ensure user exists
+          await this.database.ensureUserExists(userId);
+
+          // Get recent meals
+          const meals = await this.database.getRecentMeals(userId, limit);
+
+          logger.info('Listed meals successfully via MCP tool', { count: meals.length, userId });
+
+          if (meals.length === 0) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: '📭 No meals found.',
+                },
+              ],
+            };
+          }
+
+          // Format meals for display
+          const mealsList = meals.map((meal) => {
+            // Format macros for display
+            const macros = [];
+            if (meal.proteinGrams !== null && meal.proteinGrams !== undefined) {
+              macros.push(`${meal.proteinGrams}g protein`);
+            }
+            if (meal.carbsGrams !== null && meal.carbsGrams !== undefined) {
+              macros.push(`${meal.carbsGrams}g carbs`);
+            }
+            if (meal.fatGrams !== null && meal.fatGrams !== undefined) {
+              macros.push(`${meal.fatGrams}g fat`);
+            }
+            const macroText = macros.length > 0 ? `\n   Macros: ${macros.join(', ')}` : '';
+
+            // Format the logged date
+            const loggedAtText = format(meal.loggedAt, 'PPpp');
+
+            return `🍽️ **${meal.mealName}** - ${meal.calories} calories
+   ID: ${meal.id}
+   Logged: ${loggedAtText}${macroText}`;
+          });
+
+          const summary = `📋 **Recent Meals** (showing ${meals.length} of last ${limit})`;
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `${summary}\n\n${mealsList.join('\n\n')}`,
+              },
+            ],
+          };
+        } catch (error) {
+          logger.error('Failed to list meals via MCP tool', error);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `❌ Failed to list meals: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              },
+            ],
+          };
+        }
+      },
+    );
+
     // Register add_weights tool
     this.server.registerTool(
       'add_weights',
